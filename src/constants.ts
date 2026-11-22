@@ -13,8 +13,25 @@ export const SUPPLEMENT_OPTIONS = [
   { value: 'ad-astra', label: 'Personagem do Suplemento Ad Astra' },
   { value: 'nova-ruvia', label: 'Personagem do Suplemento Nova Rúvia' },
   { value: 'portadores-milagres', label: 'Personagem do Suplemento Portadores de Milagres' },
+  { value: 'eidos', label: 'Personagem do Suplemento Eidos' },
   { value: 'nave', label: 'Nave (Suplemento Ad Astra)' },
 ] as const;
+
+export const EIDOS_FAMILIES = [
+  ['Bernard', 'Sangue'], ['Arganzo', 'Espaço'], ['Ashcombe', 'Vapor'], ['Kessler', 'Tóxico'],
+  ['Virtanen', 'Estase'], ['Valdés', 'Aço'], ['Hartley', 'Abismo'], ['Wiradinata', 'Magma'],
+  ['Lin', 'Cristal'], ['Baek', 'Plasma'], ['Malhotra', 'Miragem'], ['Zhao', 'Magnetismo'],
+  ['Al-Qasimi', 'Areia'], ['Adebayo', 'Argila'], ['Mensah', 'Glitter'], ['Kamau', 'Hormônio'],
+  ['Van der Merwe', 'Osso'], ['Lachance', 'Neve'], ['Calloway', 'Ozônio'], ['Albuquerque', 'Flora'],
+  ['Etcheverry', 'Plankton'], ['Garza', 'Ferrugem'], ['Pigoro', 'Gravidade'], ['Kowalczyk', 'Vácuo'],
+  ['Haugen', 'Aurora'], ['Tan', 'Neural'], ['Demir', 'Silício'], ['Trần', 'Vírus'],
+  ['Diop', 'Nuvem'], ['Errázuriz', 'Imã'], ['Tachibana', 'Purificação'], ['Whitmore', 'Urânio'],
+  ['Orlova', 'Etanol'], ['Tesfaye', 'Planta'], ['von Steinach', 'Densidade'], ['Bellamy', 'Atmosfera'],
+  ['Shen', 'Proporção'], ['Mansour', 'Sorte'], ['Restrepo', 'Natureza'], ['Iyer', 'Matéria'],
+  ['Ventura', 'Física'],
+] as const;
+
+export const EIDOS_INSTITUTES = ['Kepler', 'Lomonosov', 'Zhang Heng', 'Paracelso', 'Tesla', 'Hipátia', 'Florey'] as const;
 
 export const PORTADORES_ORIGINS = [
   { name: 'A Alma de Palco', basePV: 12, money: 70, income: 20, skills: { 'Atuação': 1, 'Cultura': 1 }, abilityName: 'Ensaio Geral' },

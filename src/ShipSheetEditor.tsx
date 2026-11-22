@@ -108,7 +108,7 @@ export default function ShipSheetEditor({ name, data, onNameChange, onChange, on
               <Upload size={15} /> Carregar backup
             </button>
             <button type="button" onClick={() => setShareNotice(true)} className="rounded border border-sky-300/30 px-3 py-2 text-xs font-bold uppercase text-sky-200 hover:bg-sky-300/10">
-              Compartilhamento em desenvolvimento
+              Compartilhar (em breve)
             </button>
           </div>
         </header>

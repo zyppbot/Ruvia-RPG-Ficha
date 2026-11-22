@@ -74,6 +74,7 @@ interface PortadoresSheetEditorProps {
 
 export default function PortadoresSheetEditor({ character, onChange, onBack, onSave, onLoad }: PortadoresSheetEditorProps) {
   const data = character.supplementData || {};
+  const [shareNotice, setShareNotice] = useState(false);
   const [impetusAdjustment, setImpetusAdjustment] = useState(0);
   const activeFace = data.activeFace || 'civil';
   const civilAttributes = data.civilAttributes || character.attributes;
@@ -233,8 +234,15 @@ export default function PortadoresSheetEditor({ character, onChange, onBack, onS
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={onSave} className="rounded border border-current/30 px-3 py-2 text-xs font-bold uppercase">Salvar backup</button>
             <button type="button" onClick={onLoad} className="rounded border border-current/30 px-3 py-2 text-xs font-bold uppercase">Carregar backup</button>
+            <button type="button" onClick={() => setShareNotice(true)} className="rounded border border-current/30 px-3 py-2 text-xs font-bold uppercase">Compartilhar (em breve)</button>
           </div>
         </header>
+
+        {shareNotice && (
+          <div role="status" aria-live="polite" className="rounded border border-current/20 bg-black/10 p-3 text-xs">
+            Compartilhamento simultâneo por link está em desenvolvimento e ainda não está disponível.
+          </div>
+        )}
 
         <section className="grid gap-4 rounded border border-current/25 bg-black/10 p-4 md:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs font-bold uppercase">

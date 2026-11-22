@@ -38,6 +38,7 @@ export interface Item {
   price?: number;
   icon?: string;
   type?: string;
+  category?: EidosItemCategory;
 }
 
 export interface ClassAbility {
@@ -54,7 +55,156 @@ export type CharacterSupplement =
   | 'ad-astra'
   | 'nova-ruvia'
   | 'portadores-milagres'
+  | 'eidos'
   | 'nave';
+
+export type EidosOrigin = 'Mago de Casta' | 'Insurgente' | 'Mago Artificial';
+export type EidosItemCategory = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface EidosCad {
+  id: string;
+  name: string;
+  format: string;
+  type: 'Geral' | 'Integrado' | 'Especializado' | 'Autônomo';
+  slots: number;
+  compilerModel: number;
+  psiprojectorModel: number;
+  memoryModel: number;
+  model: string;
+  linked: boolean;
+  modules: string;
+  notes: string;
+  spellSlots: { id: string; spellId: string }[];
+}
+
+export interface EidosSpell {
+  id: string;
+  name: string;
+  categories: string[];
+  cores: string;
+  castingTime: string;
+  duration: string;
+  damageType: string;
+  resistanceSkill: string;
+  pp: string;
+  psCost: string;
+  passive: boolean;
+  spiritual: boolean;
+  recordedEffect: boolean;
+  spellSheet: string;
+  description: string;
+}
+
+export interface EidosCircle {
+  id: string;
+  name: string;
+  materials: string;
+  description: string;
+}
+
+export interface EidosFamiliar {
+  id: string;
+  name: string;
+  grade: number;
+  desire: string;
+  taboo: string;
+  bondLevel: number;
+  core: string;
+  defiant: boolean;
+}
+
+export interface EidosBattery {
+  id: string;
+  model: string;
+  currentPS: number;
+  capacity: number;
+}
+
+export interface EidosVehicle {
+  id: string;
+  name: string;
+  category: EidosItemCategory;
+  currentPV: number;
+  maxPV: number;
+  defense: number;
+  movement: number;
+  armor: number;
+  seats: number;
+  security: number;
+  refinements: { engine: number; armor: number; wheels: number; structure: number; electronics: number; security: number };
+  antiMagicInsulation: boolean;
+  enchantedParts: string;
+  mountedWeapons: { id: string; name: string; description: string }[];
+}
+
+export interface EidosSubject {
+  id: string;
+  name: string;
+  studies: number;
+}
+
+export interface EidosClub {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface EidosBond {
+  id: string;
+  characterName: string;
+  type: 'Cumplicidade' | 'Rivalidade';
+  degree: number;
+}
+
+export interface EidosNpcLink {
+  id: string;
+  npcName: string;
+  level: number;
+  affinityPoints: number;
+}
+
+export interface EidosSheetData {
+  origin?: EidosOrigin;
+  family?: string;
+  customFamily?: string;
+  casteCore?: string;
+  artificialBody?: 'PV' | 'PS';
+  artificialOrigin?: 'Pública' | 'Secreta';
+  institute?: string;
+  customInstitute?: string;
+  course?: string;
+  academicYear?: number;
+  stubbornnessUsed?: boolean;
+  resilienceUsed?: boolean;
+  pvCurrent?: number;
+  psCurrent?: number;
+  pvBonus?: number;
+  psBonus?: number;
+  sequelae?: number;
+  miraclePoint?: boolean;
+  conditions?: Record<string, boolean>;
+  otherConditions?: string;
+  reputationEvents?: number;
+  cads?: EidosCad[];
+  spells?: EidosSpell[];
+  circles?: EidosCircle[];
+  familiars?: EidosFamiliar[];
+  euros?: number;
+  batteries?: EidosBattery[];
+  vehicles?: EidosVehicle[];
+  resources?: number;
+  interludeActions?: number;
+  studyBonuses?: string;
+  subjects?: EidosSubject[];
+  clubs?: EidosClub[];
+  bonds?: EidosBond[];
+  npcLinks?: EidosNpcLink[];
+  familyBackground?: string;
+  magicDiscovery?: string;
+  cadAppearance?: string;
+  motivation?: string;
+  secret?: string;
+}
 
 export type NovaVehicleCategory =
   | 'Bicicleta ou patinete'
@@ -243,6 +393,7 @@ export interface SupplementData {
   income?: number;
   resourceCount?: number;
   destransformed?: boolean;
+  eidos?: EidosSheetData;
 }
 
 export interface CharacterSheet {

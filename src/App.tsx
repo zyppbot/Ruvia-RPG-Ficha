@@ -33,6 +33,7 @@ import {
   Zap,
   Lock,
   Unlock,
+  Atom,
   Coins,
   Package,
   Download,
@@ -74,6 +75,7 @@ import {
 import { ORIGINS, FOUR_ELEMENTS_ORIGINS as FOUR_ELEMENT_ORIGIN_DATA, INFAMES_ORIGINS as INFAMES_ORIGIN_DATA } from './originData';
 import NovaVehiclesPanel from './NovaVehiclesPanel';
 import PortadoresSheetEditor from './PortadoresSheetEditor';
+const EidosSheetEditor = React.lazy(() => import('./EidosSheetEditor'));
 
 interface CharacterFolder {
   id: string;
@@ -85,6 +87,7 @@ type CharacterLevel = number | 'none';
 function getCharacterLevel(character: CharacterSheet): CharacterLevel {
   if (character.supplement === 'quatro-elementos' || character.supplement === 'fading-humans' || character.supplement === 'portadores-milagres') return 'none';
   if (character.kind === 'nave') return character.shipData?.level || 1;
+  if (character.supplement === 'eidos') return character.level;
   if (character.supplement === 'ad-astra') return character.level || 1;
   return Math.max(1, Object.values(character.specializations || {}).reduce((sum, level) => sum + (level || 0), 0));
 }
@@ -146,6 +149,14 @@ const SUPPLEMENT_THEMES = {
     panel: 'bg-[#163a30]',
     card: 'bg-[#163a30] border-[#6fd3a8]/30',
   },
+  eidos: {
+    accent: 'text-[#b9a7f3]',
+    accentSoft: 'text-[#b9a7f3]/70',
+    button: 'bg-[#7d63c8] text-white',
+    badge: 'bg-[#b9a7f3]/10 border-[#b9a7f3]/25 text-[#d3c7fb]',
+    panel: 'bg-[#171b26]',
+    card: 'bg-[#121721] border-[#aa91ef]/30',
+  },
   nave: {
     accent: 'text-[#7dd3fc]',
     accentSoft: 'text-[#bae6fd]',
@@ -164,6 +175,7 @@ const SUPPLEMENT_CARD_LABELS: Record<CharacterSupplement, string> = {
   'ad-astra': 'Ficha de Ad Astra',
   'nova-ruvia': 'Ficha de Nova Rúvia',
   'portadores-milagres': 'Ficha de Portadores de Milagres',
+  eidos: 'Ficha de Eidos',
   nave: 'Ficha de Nave • Ad Astra',
 };
 
@@ -716,7 +728,7 @@ export default function App() {
   const createCharacterFromSupplement = (supplement: CharacterSupplement, customName?: string) => {
     const id = Math.random().toString(36).slice(2, 10);
     const isShip = supplement === 'nave';
-    const initialSpecializations = isShip || supplement === 'quatro-elementos' || supplement === 'fading-humans' || supplement === 'ad-astra' || supplement === 'portadores-milagres'
+    const initialSpecializations = isShip || supplement === 'quatro-elementos' || supplement === 'fading-humans' || supplement === 'ad-astra' || supplement === 'portadores-milagres' || supplement === 'eidos'
       ? {}
       : { 'Lutador': 1 };
 
@@ -726,7 +738,7 @@ export default function App() {
       supplement,
       kind: isShip ? 'nave' : 'personagem',
       shipData: isShip ? createShipData() : undefined,
-      name: customName || (isShip ? 'Nova Nave' : 'Novo Herói'),
+      name: customName || (isShip ? 'Nova Nave' : supplement === 'eidos' ? 'Novo Personagem Eidos' : 'Novo Herói'),
       title: isShip ? 'Nave de Patrulha' : 'Aventureiro Iniciante',
       specializations: initialSpecializations,
       stats: {
@@ -753,7 +765,15 @@ export default function App() {
                       civilPVCurrent: 10, heroPVCurrent: 20, impetus: 0, miracleGifts: [], giftSlots: 3, bondRank: 1,
                       civilLinks: ['', '', ''], money: 0, resourceCount: 0,
                     }
-                  : undefined,
+                  : supplement === 'eidos'
+                    ? {
+                        eidos: {
+                          origin: 'Mago de Casta', artificialBody: 'PV', artificialOrigin: 'Pública',
+                          cads: [], spells: [], circles: [], familiars: [], batteries: [], vehicles: [],
+                          subjects: [], clubs: [], bonds: [], npcLinks: [], resources: 0,
+                        },
+                      }
+                    : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       origin: isShip ? '' : INITIAL_CHARACTER.origin,
@@ -1177,12 +1197,74 @@ export default function App() {
                 setActiveId(char.id);
                 setView('sheet');
               }}
-              className={`character-card p-6 rounded-sm cursor-pointer transition-all group ${char.kind === 'nave' ? 'bg-[#0b1323] border border-sky-300/30 hover:border-sky-200' : char.supplement === 'portadores-milagres' ? 'border border-[#6fd3a8]/40 bg-gradient-to-r from-[#dcefe4] to-[#163a30] hover:border-[#6fd3a8]' : `${SUPPLEMENT_THEMES[(char.supplement || 'modulo-basico')].card} ${char.supplement === 'infames-condutores' ? 'hover:border-[#aeb5bd]' : char.supplement === 'ad-astra' ? 'hover:border-[#b49ade]' : 'hover:border-ruvia-accent'}`}`}
+              className={`character-card p-6 rounded-sm cursor-pointer transition-all group ${char.supplement === 'eidos' ? 'relative overflow-hidden' : ''} ${char.kind === 'nave' ? 'bg-[#0b1323] border border-sky-300/30 hover:border-sky-200' : char.supplement === 'portadores-milagres' ? 'border border-[#6fd3a8]/40 bg-gradient-to-r from-[#dcefe4] to-[#163a30] hover:border-[#6fd3a8]' : `${SUPPLEMENT_THEMES[(char.supplement || 'modulo-basico')].card} ${char.supplement === 'eidos' ? 'hover:border-[#b9a7f3]' : char.supplement === 'infames-condutores' ? 'hover:border-[#aeb5bd]' : char.supplement === 'ad-astra' ? 'hover:border-[#b49ade]' : 'hover:border-ruvia-accent'}`}`}
             >
-              <div className="flex justify-between items-start">
+              {char.supplement === 'eidos' && (
+                <div className="eidos-card-sigil" aria-hidden="true">
+                  <svg viewBox="0 0 224 224" className="eidos-sigil-rotor">
+                    <defs>
+                      <linearGradient id={`eidos-sigil-spectrum-${char.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#73e4d3" />
+                        <stop offset="24%" stopColor="#a9a0ff" />
+                        <stop offset="49%" stopColor="#f4d276" />
+                        <stop offset="74%" stopColor="#ee91c2" />
+                        <stop offset="100%" stopColor="#73e4d3" />
+                      </linearGradient>
+                    </defs>
+                    <g fill="none" stroke={`url(#eidos-sigil-spectrum-${char.id})`} strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke">
+                      <circle cx="112" cy="112" r="103" />
+                      <circle cx="112" cy="112" r="97" strokeDasharray="1 3.5" />
+                      <circle cx="112" cy="112" r="89" strokeDasharray="15 3 2 3" />
+                      <circle cx="112" cy="112" r="78" />
+                      <circle cx="112" cy="112" r="68" strokeDasharray="2 3" />
+                      <circle cx="112" cy="112" r="51" />
+                      <circle cx="112" cy="112" r="35" strokeDasharray="11 2 1 2" />
+                      <path d="M112 15 199 164H25L112 15Z M112 209 25 60h174l-87 149Z" />
+                      <path d="M112 43c39 0 69 28 69 65 0 34-30 65-69 73-39-8-69-39-69-73 0-37 30-65 69-65Z" />
+                      <path d="M112 51c-20 18-32 37-32 57 0 25 19 43 32 52 13-9 32-27 32-52 0-20-12-39-32-57Z" />
+                      <path d="M112 68c-9 10-16 18-16 28 0 10 7 18 16 24 9-6 16-14 16-24 0-10-7-18-16-28Z" />
+                      <path d="M93 112c5-7 11-10 19-10s14 3 19 10c-5 7-11 10-19 10s-14-3-19-10Z" />
+                      <circle cx="112" cy="112" r="5" />
+                      <path d="M112 39v30M53 146l29-18m89 18-29-18" />
+                      <circle cx="112" cy="43" r="13" />
+                      <circle cx="53" cy="146" r="13" />
+                      <circle cx="171" cy="146" r="13" />
+                      <path d="M112 34v18m-8-9h16m-14-6 12 12m-12 0 12-12" />
+                      <path d="M53 136v20m-8-10h16m-14-6 12 12m-12 0 12-12" />
+                      <path d="M171 136v20m-8-10h16m-14-6 12 12m-12 0 12-12" />
+                      <path d="M112 8v9m-4-4h8" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(30 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(60 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(90 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(120 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(150 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(180 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(210 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(240 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(270 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(300 112 112)" />
+                      <path d="M112 8v9m-4-4h8" transform="rotate(330 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(15 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(45 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(75 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(105 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(135 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(165 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(195 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(225 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(255 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(285 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(315 112 112)" />
+                      <path d="M112 28v6m-3-3h6" transform="rotate(345 112 112)" />
+                    </g>
+                  </svg>
+                </div>
+              )}
+              <div className={`flex justify-between items-start ${char.supplement === 'eidos' ? 'relative z-10' : ''}`}>
                 <div>
-                  <h3 className={`text-2xl font-bold transition-colors ${char.kind === 'nave' ? 'text-sky-100 group-hover:text-sky-300' : char.supplement === 'portadores-milagres' ? 'text-[#163a30]' : 'text-white group-hover:text-ruvia-accent'}`}>
+                  <h3 className={`text-2xl font-bold transition-colors ${char.kind === 'nave' ? 'text-sky-100 group-hover:text-sky-300' : char.supplement === 'portadores-milagres' ? 'text-[#163a30]' : char.supplement === 'eidos' ? 'text-[#eee9ff] group-hover:text-[#d4c2ff]' : 'text-white group-hover:text-ruvia-accent'}`}>
                     {char.kind === 'nave' ? <span className="mr-2 inline-flex align-middle"><Rocket size={20} /></span> : null}
+                    {char.supplement === 'eidos' ? <span className="mr-2 inline-flex align-middle text-[#b9a7f3]"><Atom size={20} /></span> : null}
                     {char.supplement === 'portadores-milagres' ? (
                       <span className="grid grid-cols-2 gap-3">
                         <span className="font-['Patrick_Hand']">{char.name || 'Nome Civil'}</span>
@@ -1197,7 +1279,7 @@ export default function App() {
                       </span>
                     ))}
                   </div>
-                  <p className={`mt-2 text-[10px] font-medium uppercase tracking-[0.12em] ${char.kind === 'nave' ? 'text-sky-300' : 'text-ruvia-accent/80'}`}>
+                  <p className={`mt-2 text-[10px] font-medium uppercase tracking-[0.12em] ${char.kind === 'nave' ? 'text-sky-300' : char.supplement === 'eidos' ? 'text-[#b9a7f3]' : 'text-ruvia-accent/80'}`}>
                     {SUPPLEMENT_CARD_LABELS[char.supplement || 'modulo-basico']}
                   </p>
                 </div>
@@ -1206,14 +1288,14 @@ export default function App() {
                     <p className="text-xs uppercase tracking-widest text-sky-300">{char.shipData?.size || 'Pequena'}</p>
                   ) : char.supplement !== 'quatro-elementos' && char.supplement !== 'fading-humans' && char.supplement !== 'portadores-milagres' ? (
                     <>
-                      <p className="text-[10px] uppercase tracking-widest text-ruvia-accent/60">Nível Total</p>
-                      <p className="text-xl font-black">{char.supplement === 'ad-astra' ? char.level || 1 : (Object.values(char.specializations || {}) as number[]).reduce((a, b) => a + (b || 0), 0) || 1}</p>
+                      <p className={`text-[10px] uppercase tracking-widest ${char.supplement === 'eidos' ? 'text-[#b9a7f3]/75' : 'text-ruvia-accent/60'}`}>Nível Total</p>
+                      <p className={`text-xl font-black ${char.supplement === 'eidos' ? 'text-[#f1ecff]' : ''}`}>{char.supplement === 'eidos' ? char.level : char.supplement === 'ad-astra' ? char.level || 1 : (Object.values(char.specializations || {}) as number[]).reduce((a, b) => a + (b || 0), 0) || 1}</p>
                     </>
                   ) : null}
                 </div>
               </div>
               
-              <div data-character-stats={char.kind === 'nave' || char.supplement === 'portadores-milagres' ? 'hidden' : 'visible'} className="mt-6 flex flex-wrap gap-4 text-[10px] uppercase font-bold opacity-60">
+              <div data-character-stats={char.kind === 'nave' || char.supplement === 'portadores-milagres' || char.supplement === 'eidos' ? 'hidden' : 'visible'} className="mt-6 flex flex-wrap gap-4 text-[10px] uppercase font-bold opacity-60">
                 <div className="flex items-center gap-1">
                   <Heart size={10} className="text-red-500" /> 
                   {(() => {
@@ -1335,6 +1417,24 @@ export default function App() {
           onSave={exportCurrentCharacter}
           onLoad={() => fileInputRef.current?.click()}
         />
+        {importDialog}
+      </>
+    );
+  }
+
+  if (activeCharacter.supplement === 'eidos') {
+    return (
+      <>
+        <input type="file" ref={fileInputRef} onChange={importCharacters} className="hidden" accept=".json" />
+        <React.Suspense fallback={<main className="eidos-sheet grid min-h-screen place-items-center text-[#2a2550]">Carregando ficha Eidos...</main>}>
+          <EidosSheetEditor
+            character={activeCharacter}
+            onChange={updateCharacter}
+            onBack={() => setView('list')}
+            onSave={exportCurrentCharacter}
+            onLoad={() => fileInputRef.current?.click()}
+          />
+        </React.Suspense>
         {importDialog}
       </>
     );

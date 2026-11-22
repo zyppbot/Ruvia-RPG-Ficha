@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Spectral:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&family=Patrick+Hand&family=Philosopher:wght@400;700&family=Raleway:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 @import "tailwindcss";
 
@@ -54,6 +55,8 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Spectral", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-eidos-display: "Space Grotesk", sans-serif;
+  --font-eidos-mono: "IBM Plex Mono", monospace;
 
   --color-ruvia-bg: #0c0c0c;
   --color-ruvia-card: #141414;
@@ -260,6 +263,401 @@
   font-family: "Bangers", "Alegreya", serif;
   letter-spacing: 0.04em;
   color: #6fd3a8;
+}
+
+[data-supplement="eidos"] {
+  --eidos-page: #10131c;
+  --eidos-panel: #181d29;
+  --eidos-raised: #202737;
+  --eidos-field: #141a25;
+  --eidos-text: #ebe8f5;
+  --eidos-text-soft: #c8c2dc;
+  --eidos-muted: #a7a1be;
+  --eidos-violet: #b6a2f6;
+  --eidos-border: rgb(182 162 246 / 22%);
+  --sheet-menu-background: #171c28;
+  --sheet-menu-color: #ebe8f5;
+  color-scheme: dark;
+}
+
+.eidos-sheet {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgb(91 69 143 / 21%), transparent 42%),
+    radial-gradient(ellipse at 88% 18%, rgb(39 86 91 / 12%), transparent 36%),
+    var(--eidos-page);
+  color: var(--eidos-text);
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.eidos-sheet h1,
+.eidos-sheet h2,
+.eidos-sheet h3 {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.eidos-sheet .eidos-panel {
+  border-color: var(--eidos-border);
+  background: linear-gradient(145deg, rgb(29 35 49 / 96%), rgb(22 27 39 / 98%));
+  box-shadow: 0 14px 36px rgb(0 0 0 / 22%), inset 0 1px 0 rgb(255 255 255 / 3%);
+}
+
+.eidos-sheet .eidos-field {
+  border-color: rgb(182 162 246 / 27%);
+  background-color: var(--eidos-field);
+  color: var(--eidos-text);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+}
+
+.eidos-sheet .eidos-field::placeholder {
+  color: #8f8aa6;
+}
+
+.eidos-sheet .eidos-field:focus {
+  border-color: #c0adff;
+  box-shadow: 0 0 0 3px rgb(182 162 246 / 17%);
+}
+
+.eidos-sheet .eidos-label,
+.eidos-sheet .eidos-option-label {
+  color: var(--eidos-text-soft);
+}
+
+.eidos-sheet .eidos-checkbox {
+  accent-color: #b6a2f6;
+}
+
+.eidos-sheet .eidos-add-button {
+  border-color: rgb(182 162 246 / 30%);
+  background: rgb(182 162 246 / 9%);
+  color: #d3c7fb;
+}
+
+.eidos-sheet .eidos-add-button:hover {
+  background: rgb(182 162 246 / 17%);
+}
+
+.eidos-sheet .eidos-remove-button {
+  color: #e89aa8;
+}
+
+.eidos-sheet .eidos-option-card {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--eidos-border);
+  border-radius: 0.65rem;
+  background: rgb(182 162 246 / 6%);
+  padding: 0.75rem;
+}
+
+.eidos-sheet [class*="bg-white/"],
+.eidos-sheet [class*="bg-[#f5f3fa]"] {
+  background-color: var(--eidos-raised);
+}
+
+.eidos-sheet [class*="border-[#6c4fd1]"] {
+  border-color: rgb(182 162 246 / 22%);
+}
+
+.eidos-sheet [class*="text-[#2a2550]"] {
+  color: var(--eidos-text);
+}
+
+.eidos-sheet [class*="text-[#403b68]"] {
+  color: var(--eidos-text-soft);
+}
+
+.eidos-sheet [class*="text-[#514a7d]"],
+.eidos-sheet [class*="text-[#5c5681]"],
+.eidos-sheet [class*="text-[#6b6590]"],
+.eidos-sheet [class*="text-[#625b89]"] {
+  color: var(--eidos-muted);
+}
+
+.eidos-sheet [class*="text-[#5143a0]"],
+.eidos-sheet [class*="text-[#4c389f]"],
+.eidos-sheet [class*="text-[#6c4fd1]"] {
+  color: var(--eidos-violet);
+}
+
+.eidos-sheet [class*="text-[#a14d29]"] {
+  color: #efb58a;
+}
+
+.eidos-sheet [class*="text-[#a64756]"] {
+  color: #e89aa8;
+}
+
+.eidos-sheet .eidos-resource-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid;
+  border-radius: 0.9rem;
+  padding: 1rem;
+}
+
+.eidos-sheet .eidos-resource-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.eidos-sheet .eidos-resource-pv {
+  border-color: rgb(115 228 211 / 28%);
+  background: linear-gradient(145deg, #13252c, #172b2e 54%, #1d302d);
+}
+
+.eidos-sheet .eidos-resource-ps {
+  border-color: rgb(237 198 108 / 29%);
+  background: linear-gradient(145deg, #29251c, #302a1f 56%, #352b1e);
+}
+
+.eidos-sheet .eidos-meter-track {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  height: 0.85rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 999px;
+  background: rgb(8 13 19 / 66%);
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 25%);
+}
+
+.eidos-sheet .eidos-meter-fill {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform 720ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.eidos-sheet .eidos-pv-fill {
+  background: linear-gradient(90deg, #64d5d9, #a7e9c2 55%, #c4f1c4);
+}
+
+.eidos-sheet .eidos-pv-fill::before {
+  position: absolute;
+  inset: -25% -60%;
+  background: linear-gradient(105deg, transparent 35%, rgb(232 255 246 / 44%) 50%, transparent 65%);
+  background-size: 180% 100%;
+  content: "";
+  animation: eidos-water-sheen 5.6s ease-in-out infinite;
+}
+
+.eidos-sheet .eidos-pv-fill::after {
+  position: absolute;
+  top: -25%;
+  right: -3px;
+  width: 12px;
+  height: 150%;
+  border-radius: 48%;
+  background: linear-gradient(90deg, rgb(157 238 218 / 20%), #dcfff1 55%, rgb(202 255 228 / 38%));
+  content: "";
+  filter: blur(0.6px);
+  animation: eidos-water-edge 2.7s ease-in-out infinite;
+}
+
+.eidos-sheet .eidos-ps-fill {
+  background: linear-gradient(90deg, #f7edb5 0%, #e8c35f 55%, #c89437 100%);
+}
+
+.eidos-sheet .eidos-ps-fill::before {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='24' viewBox='0 0 28 24'%3E%3Cpath d='M7 1h14l7 11-7 11H7L0 12Z' fill='none' stroke='%23fff8d8' stroke-opacity='.52' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 28px 24px;
+  content: "";
+  opacity: 0.32;
+  animation: eidos-hex-flicker 11.6s steps(1, end) infinite;
+}
+
+.eidos-sheet .eidos-ps-idle-glint {
+  position: absolute;
+  inset: 50% 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 96%) 48%, transparent);
+  opacity: 0;
+  animation: eidos-ps-idle-glint 12.8s steps(1, end) infinite;
+}
+
+.eidos-sheet .eidos-ps-change-flash {
+  position: absolute;
+  inset: 50% 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #fffef0 42%, #fff 50%, #fffef0 58%, transparent);
+  box-shadow: 0 0 5px 2px rgb(255 250 212 / 72%), 0 0 12px rgb(255 255 255 / 48%);
+  animation: eidos-ps-value-flash 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.eidos-sheet .eidos-skill-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.65rem 3.1rem;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  border: 1px solid rgb(182 162 246 / 14%);
+  border-radius: 0.65rem;
+  background: linear-gradient(145deg, rgb(34 40 56 / 82%), rgb(25 31 44 / 88%));
+  padding: 0.55rem;
+}
+
+.eidos-sheet .eidos-skill-control,
+.eidos-sheet .eidos-event-control {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--eidos-muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+.eidos-sheet .eidos-event-control {
+  grid-template-columns: auto 3.25rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.eidos-sheet .eidos-skill-total {
+  display: grid;
+  min-height: 2.85rem;
+  align-content: center;
+  justify-items: center;
+  border: 1px solid rgb(174 153 240 / 29%);
+  border-radius: 0.55rem;
+  background: linear-gradient(145deg, rgb(121 97 191 / 24%), rgb(92 75 153 / 18%));
+  color: #e6ddff;
+  line-height: 1.1;
+}
+
+.eidos-sheet .eidos-skill-total span {
+  color: #c0b2e8;
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.eidos-sheet .eidos-skill-total strong {
+  margin-top: 0.2rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1rem;
+}
+
+.eidos-sheet .eidos-skill-total.is-over {
+  border-color: rgb(239 181 138 / 38%);
+  background: rgb(148 82 44 / 19%);
+  color: #efc39f;
+}
+
+.eidos-sheet .eidos-skill-total.is-over span {
+  color: #eab48e;
+}
+
+.eidos-sheet .font-\[family-name\:var\(--font-eidos-mono\)\] {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.character-card[data-supplement="eidos"] {
+  position: relative;
+  overflow: hidden;
+  border-color: rgb(182 162 246 / 27%);
+  background:
+    radial-gradient(ellipse at 18% 0%, rgb(103 83 152 / 17%), transparent 58%),
+    linear-gradient(145deg, #171a26, #10141d 72%);
+  color: #ebe8f5;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.character-card[data-supplement="eidos"] > *:not(.eidos-card-sigil) {
+  position: relative;
+  z-index: 1;
+}
+
+.character-card[data-supplement="eidos"] h3 {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.character-card[data-supplement="eidos"] [class*="text-ruvia-accent"] {
+  color: #b9a7f3;
+}
+
+.character-card[data-supplement="eidos"]:hover {
+  border-color: #b9a7f3;
+  box-shadow: 0 12px 34px rgb(0 0 0 / 26%), 0 0 0 1px rgb(182 162 246 / 10%);
+}
+
+.eidos-card-sigil {
+  position: absolute;
+  top: 50%;
+  right: -6.75rem;
+  width: 17rem;
+  height: 17rem;
+  transform: translateY(-50%);
+  opacity: 0.66;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent 3%, #000 34%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 3%, #000 34%);
+}
+
+.eidos-sigil-rotor {
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+  animation: eidos-sigil-rotate 58s linear infinite, eidos-sigil-hue 32s linear infinite;
+}
+
+@keyframes eidos-water-sheen {
+  0%, 100% { transform: translateX(-12%); opacity: 0.26; }
+  50% { transform: translateX(18%); opacity: 0.68; }
+}
+
+@keyframes eidos-water-edge {
+  0%, 100% { transform: translateY(-3%) scaleY(0.88); }
+  50% { transform: translateY(3%) scaleY(1.06); }
+}
+
+@keyframes eidos-hex-flicker {
+  0%, 18%, 22%, 63%, 67%, 100% { opacity: 0.24; }
+  19%, 64% { opacity: 0.62; }
+  21%, 66% { opacity: 0.12; }
+}
+
+@keyframes eidos-ps-idle-glint {
+  0%, 7%, 10%, 46%, 50%, 83%, 88%, 100% { opacity: 0; }
+  8%, 47%, 85% { opacity: 0.95; }
+}
+
+@keyframes eidos-ps-value-flash {
+  0%, 100% { opacity: 0; }
+  18%, 60% { opacity: 1; }
+}
+
+@keyframes eidos-sigil-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes eidos-sigil-hue {
+  to { filter: hue-rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eidos-sheet .eidos-meter-fill,
+  .eidos-sheet .eidos-pv-fill::before,
+  .eidos-sheet .eidos-pv-fill::after,
+  .eidos-sheet .eidos-ps-fill::before,
+  .eidos-sheet .eidos-ps-idle-glint,
+  .eidos-sheet .eidos-ps-change-flash,
+  .character-card[data-supplement="eidos"] .eidos-sigil-rotor {
+    animation: none;
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .eidos-card-sigil {
+    right: -8rem;
+    opacity: 0.48;
+  }
 }
 
 [data-supplement] select option {
