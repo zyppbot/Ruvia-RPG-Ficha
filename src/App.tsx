@@ -75,6 +75,8 @@ import {
 import { ORIGINS, FOUR_ELEMENTS_ORIGINS as FOUR_ELEMENT_ORIGIN_DATA, INFAMES_ORIGINS as INFAMES_ORIGIN_DATA } from './originData';
 import NovaVehiclesPanel from './NovaVehiclesPanel';
 import PortadoresSheetEditor from './PortadoresSheetEditor';
+import { OficinaCodeBar, CopyOrvCodeButton } from './OficinaCodeBar';
+import { encodeAbilityToOrvCode, encodeInventoryItemToOrvCode } from './oficinaBridge';
 const EidosSheetEditor = React.lazy(() => import('./EidosSheetEditor'));
 
 interface CharacterFolder {
@@ -1611,6 +1613,7 @@ export default function App() {
 
       {/* Main Content */}
       <div className="flex min-w-0 flex-col flex-1 gap-10">
+        <OficinaCodeBar character={activeCharacter} onApply={updateCharacter} />
         
         {/* Top Section: Basic Stats, Attributes, Domains & Elements */}
         <div className="grid min-w-0 grid-cols-1 lg:grid-cols-12 gap-8">
@@ -2087,23 +2090,26 @@ export default function App() {
                       key={`${category}-${index}`}
                       className="bg-ruvia-panel border border-white/5 p-4 rounded-sm relative group hover:border-ruvia-accent/50 transition-colors"
                     >
-                      <input
-                        className="text-sm font-black text-white mb-2 uppercase tracking-wide bg-transparent outline-none w-full border-b border-white/10 focus:border-ruvia-accent transition-colors"
-                        value={ability.name}
-                        onChange={event => updateCharacter({ abilities: activeCharacter.abilities.map((item, i) => i === index ? { ...item, name: event.target.value } : item) })}
-                      />
+                      <div className="mb-2 flex items-center gap-2 border-b border-white/10 pb-1">
+                        <input
+                          className="min-w-0 flex-1 text-sm font-black text-white uppercase tracking-wide bg-transparent outline-none focus:border-ruvia-accent transition-colors"
+                          value={ability.name}
+                          onChange={event => updateCharacter({ abilities: activeCharacter.abilities.map((item, i) => i === index ? { ...item, name: event.target.value } : item) })}
+                        />
+                        <CopyOrvCodeButton getCode={() => encodeAbilityToOrvCode(activeCharacter.supplement, ability)} className="text-ruvia-accent" />
+                        <button
+                          onClick={() => updateCharacter({ abilities: activeCharacter.abilities.filter((_, i) => i !== index) })}
+                          className="text-red-500/30 hover:text-red-500 p-1 transition-colors"
+                          aria-label="Remover habilidade"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                       <textarea
                         className="text-[11px] leading-relaxed text-gray-400 bg-transparent outline-none w-full h-24 mt-2 hover:bg-white/5 transition-colors resize-none scrollbar-hide"
                         value={ability.description}
                         onChange={event => updateCharacter({ abilities: activeCharacter.abilities.map((item, i) => i === index ? { ...item, description: event.target.value } : item) })}
                       />
-                      <button
-                        onClick={() => updateCharacter({ abilities: activeCharacter.abilities.filter((_, i) => i !== index) })}
-                        className="absolute right-2 top-2 text-red-500/30 hover:text-red-500 p-1 transition-colors"
-                        aria-label="Remover habilidade"
-                      >
-                        <Trash2 size={14} />
-                      </button>
                     </motion.div>
                   ))}
                 </div>
@@ -2163,6 +2169,7 @@ export default function App() {
                             <Coins size={10} className="text-ruvia-accent" />
                           </div>
                         )}
+                        <CopyOrvCodeButton getCode={() => encodeInventoryItemToOrvCode(activeCharacter.supplement, item)} className="text-ruvia-accent" />
                         <button 
                           onClick={() => updateCharacter({
                             inventory: activeCharacter.inventory.filter((_, i) => i !== idx)

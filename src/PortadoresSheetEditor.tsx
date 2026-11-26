@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { PORTADORES_ORIGINS } from './constants';
 import { CharacterAttributes, CharacterSheet, MiracleGift } from './types';
+import { OficinaCodeBar, CopyOrvCodeButton } from './OficinaCodeBar';
+import { encodeAbilityToOrvCode, encodeInventoryItemToOrvCode, encodeMiracleGiftToOrvCode } from './oficinaBridge';
 
 const ATTRIBUTE_FIELDS: { key: keyof CharacterAttributes; label: string }[] = [
   { key: 'forca', label: 'Força' },
@@ -244,6 +246,8 @@ export default function PortadoresSheetEditor({ character, onChange, onBack, onS
           </div>
         )}
 
+        <OficinaCodeBar character={character} onApply={onChange} variant="portadores" />
+
         <section className="grid gap-4 rounded border border-current/25 bg-black/10 p-4 md:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs font-bold uppercase">
             Origem
@@ -378,9 +382,12 @@ export default function PortadoresSheetEditor({ character, onChange, onBack, onS
             <h3 className="font-bold uppercase tracking-widest">Biblioteca de Dons</h3>
             {(data.miracleGifts || []).map((gift, index) => (
               <article key={gift.id} className="rounded border border-current/15 p-3">
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <h3 className="text-xs font-bold uppercase">Dom {index + 1}</h3>
-                  <button type="button" aria-label="Remover dom" onClick={() => updateData({ miracleGifts: data.miracleGifts?.filter(item => item.id !== gift.id) })} className="text-red-300"><Trash2 size={14} /></button>
+                  <div className="flex items-center gap-2">
+                    <CopyOrvCodeButton getCode={() => encodeMiracleGiftToOrvCode(gift)} />
+                    <button type="button" aria-label="Remover dom" onClick={() => updateData({ miracleGifts: data.miracleGifts?.filter(item => item.id !== gift.id) })} className="text-red-300"><Trash2 size={14} /></button>
+                  </div>
                 </div>
                 <input aria-label="Nome do dom" placeholder="Nome" value={gift.name} onChange={event => updateData({ miracleGifts: data.miracleGifts?.map(item => item.id === gift.id ? { ...item, name: event.target.value } : item) })} className="mb-2 w-full rounded border border-current/20 bg-black/10 p-2 text-sm" />
                 <textarea aria-label="Descrição do dom" placeholder="Descrição" value={gift.description} onChange={event => updateData({ miracleGifts: data.miracleGifts?.map(item => item.id === gift.id ? { ...item, description: event.target.value } : item) })} className="mb-2 min-h-20 w-full rounded border border-current/20 bg-black/10 p-2 text-sm" />
@@ -431,9 +438,10 @@ export default function PortadoresSheetEditor({ character, onChange, onBack, onS
             <button type="button" onClick={() => onChange({ inventory: [...character.inventory, { id: crypto.randomUUID(), name: 'Novo item', description: '', type: 'Geral' }] })} className="mb-3 flex items-center gap-1 rounded border border-current/25 px-2 py-1 text-xs font-bold uppercase"><Plus size={14} /> Item</button>
             <div className="grid gap-2 sm:grid-cols-2">
               {character.inventory.map((item, index) => (
-                <div key={item.id} className="flex gap-2">
+                <div key={item.id} className="flex items-center gap-2">
                   <input aria-label="Item do inventário" value={item.name} onChange={event => onChange({ inventory: character.inventory.map((entry, current) => current === index ? { ...entry, name: event.target.value } : entry) })} className="min-w-0 flex-1 rounded border border-current/20 bg-black/10 p-2 text-sm" />
                   <input aria-label="Descrição do item" value={item.description} onChange={event => onChange({ inventory: character.inventory.map((entry, current) => current === index ? { ...entry, description: event.target.value } : entry) })} className="min-w-0 flex-1 rounded border border-current/20 bg-black/10 p-2 text-sm" />
+                  <CopyOrvCodeButton getCode={() => encodeInventoryItemToOrvCode(character.supplement, item)} />
                   <button type="button" aria-label="Remover item" onClick={() => onChange({ inventory: character.inventory.filter((_, current) => current !== index) })} className="text-red-300"><Trash2 size={14} /></button>
                 </div>
               ))}

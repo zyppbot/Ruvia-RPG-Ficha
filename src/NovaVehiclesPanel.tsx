@@ -1,5 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { NovaVehicle, NovaVehicleCategory, NovaVehicleWeapon } from './types';
+import { CopyOrvCodeButton } from './OficinaCodeBar';
+import { encodeNovaVehicleToOrvCode } from './oficinaBridge';
 
 const VEHICLE_DEFAULTS: Record<NovaVehicleCategory, Omit<NovaVehicle, 'id' | 'name' | 'category' | 'currentPV' | 'security' | 'refinements' | 'antiMagicInsulation' | 'enchantedParts' | 'mountedWeapons'>> = {
   'Bicicleta ou patinete': { maxPV: 6, defense: 15, movement: 12, armor: 0, seats: 1 },
@@ -82,7 +84,10 @@ export default function NovaVehiclesPanel({ vehicles, onChange }: NovaVehiclesPa
                   {categories.map(category => <option key={category} value={category}>{category}</option>)}
                 </select>
               </label>
-              <button type="button" title="Remover veículo" onClick={() => onChange(vehicles.filter(item => item.id !== vehicle.id))} className="rounded border border-red-500/30 p-2 text-red-300"><Trash2 size={16} /></button>
+              <div className="flex items-center gap-2">
+                <CopyOrvCodeButton getCode={() => encodeNovaVehicleToOrvCode(vehicle)} />
+                <button type="button" title="Remover veículo" onClick={() => onChange(vehicles.filter(item => item.id !== vehicle.id))} className="rounded border border-red-500/30 p-2 text-red-300"><Trash2 size={16} /></button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {([

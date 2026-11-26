@@ -39,12 +39,14 @@ export interface Item {
   icon?: string;
   type?: string;
   category?: EidosItemCategory;
+  orvCode?: string;
 }
 
 export interface ClassAbility {
   name: string;
   description: string;
   category?: string;
+  orvCode?: string;
 }
 
 export type CharacterSupplement =
@@ -75,6 +77,7 @@ export interface EidosCad {
   modules: string;
   notes: string;
   spellSlots: { id: string; spellId: string }[];
+  orvCode?: string;
 }
 
 export interface EidosSpell {
@@ -93,6 +96,7 @@ export interface EidosSpell {
   recordedEffect: boolean;
   spellSheet: string;
   description: string;
+  orvCode?: string;
 }
 
 export interface EidosCircle {
@@ -111,6 +115,7 @@ export interface EidosFamiliar {
   bondLevel: number;
   core: string;
   defiant: boolean;
+  orvCode?: string;
 }
 
 export interface EidosBattery {
@@ -135,6 +140,7 @@ export interface EidosVehicle {
   antiMagicInsulation: boolean;
   enchantedParts: string;
   mountedWeapons: { id: string; name: string; description: string }[];
+  orvCode?: string;
 }
 
 export interface EidosSubject {
@@ -247,6 +253,7 @@ export interface NovaVehicle {
   antiMagicInsulation: boolean;
   enchantedParts: string;
   mountedWeapons: NovaVehicleWeapon[];
+  orvCode?: string;
 }
 
 export interface MiracleGift {
@@ -258,6 +265,7 @@ export interface MiracleGift {
   attackForm: 'Luta' | 'Pontaria' | 'Afinidade' | 'Nenhuma';
   combinable: boolean;
   equipped: boolean;
+  orvCode?: string;
 }
 
 export interface ShipResource {
@@ -343,6 +351,7 @@ export interface SupplementProtocol {
   energyCost: number;
   matrixPoints: number;
   snippets: string[];
+  orvCode?: string;
 }
 
 export interface SupplementData {

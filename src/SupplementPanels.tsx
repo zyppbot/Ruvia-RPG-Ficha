@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Info, Plus, Trash2 } from 'lucide-react';
 import type { CharacterAttributes, CharacterSupplement, Skill, SupplementData, SupplementProtocol } from './types';
+import { CopyOrvCodeButton } from './OficinaCodeBar';
+import { encodeProtocolToOrvCode } from './oficinaBridge';
 
 const masteries = ['Sensitividade', 'Telepatia', 'Cinesia', 'Controle', 'Restauração', 'Combate', 'Elemental', 'Polifórmica'];
 const elements: NonNullable<SupplementData['element']>[] = ['Fogo', 'Terra', 'Água', 'Ar', 'Nenhum'];
@@ -160,7 +162,13 @@ export default function SupplementPanels({ supplement, data, attributes, skills,
                 <textarea className={`${input} sm:col-span-2`} placeholder="Descrição" value={protocol.description} onChange={event => updateProtocol(protocol.id, { description: event.target.value })} />
                 <NumberInput label="Custo em PE" value={protocol.energyCost} onChange={energyCost => updateProtocol(protocol.id, { energyCost })} />
                 <NumberInput label="Pontos de Matriz" value={protocol.matrixPoints} onChange={matrixPoints => updateProtocol(protocol.id, { matrixPoints })} />
-                <div className="sm:col-span-2 flex justify-between text-xs"><span>Snippets aplicados (até 2)</span><button type="button" onClick={() => patch({ protocols: protocols.filter(item => item.id !== protocol.id) })} aria-label="Remover protocolo"><Trash2 size={14} /></button></div>
+                <div className="sm:col-span-2 flex items-center justify-between gap-2 text-xs">
+                  <span>Snippets aplicados (até 2)</span>
+                  <div className="flex items-center gap-2">
+                    <CopyOrvCodeButton getCode={() => encodeProtocolToOrvCode(protocol)} />
+                    <button type="button" onClick={() => patch({ protocols: protocols.filter(item => item.id !== protocol.id) })} aria-label="Remover protocolo"><Trash2 size={14} /></button>
+                  </div>
+                </div>
                 <input className={`${input} sm:col-span-2`} placeholder="Snippets separados por vírgula" value={protocol.snippets.join(', ')} onChange={event => updateProtocol(protocol.id, { snippets: event.target.value.split(',').map(value => value.trim()).filter(Boolean).slice(0, 2) })} />
               </div>
             ))}

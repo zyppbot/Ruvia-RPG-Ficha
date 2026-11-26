@@ -2,6 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeft, Atom, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 import { EIDOS_FAMILIES, EIDOS_INSTITUTES } from './constants';
+import { OficinaCodeBar, CopyOrvCodeButton } from './OficinaCodeBar';
+import {
+  encodeEidosCadToOrvCode,
+  encodeEidosFamiliarToOrvCode,
+  encodeEidosSpellToOrvCode,
+  encodeEidosVehicleToOrvCode,
+  encodeInventoryItemToOrvCode,
+} from './oficinaBridge';
 import type {
   CharacterAttributes,
   CharacterSheet,
@@ -506,7 +514,10 @@ export default function EidosSheetEditor({
             <details key={cad.id} className="rounded-xl border border-[#6c4fd1]/15 bg-white/55 p-4">
               <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[#2a2550]">
                 <span>{cad.name || 'CAD sem nome'} <span className="font-normal text-[#6b6590]">· {cad.type} · {cad.slots} slots</span></span>
-                <RemoveButton label="Remover CAD" onClick={() => updateData({ cads: (data.cads || []).filter(row => row.id !== cad.id) })} />
+                <div className="flex items-center gap-1" onClick={event => event.stopPropagation()}>
+                  <CopyOrvCodeButton getCode={() => encodeEidosCadToOrvCode(cad)} className="text-[#5143a0]" />
+                  <RemoveButton label="Remover CAD" onClick={() => updateData({ cads: (data.cads || []).filter(row => row.id !== cad.id) })} />
+                </div>
               </summary>
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Field label="Nome / Fabricante" value={cad.name} onChange={value => updateCad(cad.id, { name: value })} />
@@ -557,7 +568,10 @@ export default function EidosSheetEditor({
             <details key={spell.id} className="rounded-xl border border-[#6c4fd1]/15 bg-white/55 p-4">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[#2a2550]">
                 <span>{spell.name || `Magia ${index + 1}`} {spell.categories.length > 0 && <span className="font-normal text-[#6b6590]">· {spell.categories.join(', ')}</span>}</span>
-                <RemoveButton label="Remover magia" onClick={() => updateData({ spells: (data.spells || []).filter(item => item.id !== spell.id) })} />
+                <div className="flex items-center gap-1" onClick={event => event.stopPropagation()}>
+                  <CopyOrvCodeButton getCode={() => encodeEidosSpellToOrvCode(spell)} className="text-[#5143a0]" />
+                  <RemoveButton label="Remover magia" onClick={() => updateData({ spells: (data.spells || []).filter(item => item.id !== spell.id) })} />
+                </div>
               </summary>
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Field label="Nome" value={spell.name} onChange={value => updateSpell(spell.id, { name: value })} />
@@ -622,7 +636,10 @@ export default function EidosSheetEditor({
                 {(familiar.bondLevel < 1 || familiar.bondLevel > 5) && <ReferenceNote warning>Nível fora da faixa indicada pelo sistema; o valor foi mantido.</ReferenceNote>}
                 <div className="sm:col-span-2"><TextArea label="Núcleo do familiar" value={familiar.core} onChange={value => updateData({ familiars: patchRow(data.familiars, familiar.id, { core: value }) })} /></div>
                 <CheckField label="Contrariado" checked={familiar.defiant} onChange={checked => updateData({ familiars: patchRow(data.familiars, familiar.id, { defiant: checked }) })} />
-                <RemoveButton label="Remover familiar" onClick={() => updateData({ familiars: (data.familiars || []).filter(item => item.id !== familiar.id) })} />
+                <div className="flex items-center justify-end gap-2">
+                  <CopyOrvCodeButton getCode={() => encodeEidosFamiliarToOrvCode(familiar)} className="text-[#5143a0]" />
+                  <RemoveButton label="Remover familiar" onClick={() => updateData({ familiars: (data.familiars || []).filter(item => item.id !== familiar.id) })} />
+                </div>
               </div>
             </article>
           ))}
@@ -648,7 +665,10 @@ export default function EidosSheetEditor({
                     {ITEM_CATEGORIES.map((category, index) => <option key={category} value={index}>{index} · {category}</option>)}
                   </select>
                 </label>
-                <RemoveButton label="Remover item" onClick={() => onChange({ inventory: character.inventory.filter(row => row.id !== item.id) })} />
+                <div className="flex items-end gap-1">
+                  <CopyOrvCodeButton getCode={() => encodeInventoryItemToOrvCode('eidos', item)} className="mb-1 text-[#5143a0]" />
+                  <RemoveButton label="Remover item" onClick={() => onChange({ inventory: character.inventory.filter(row => row.id !== item.id) })} />
+                </div>
               </article>
             ))}
           </div>
@@ -688,7 +708,10 @@ export default function EidosSheetEditor({
                   ['currentPV', 'PV atual'], ['maxPV', 'PV máximo'], ['defense', 'Defesa'],
                   ['movement', 'Deslocamento'], ['armor', 'Blindagem'], ['seats', 'Assentos'], ['security', 'Segurança'],
                 ] as const).map(([key, label]) => <Field key={key} label={label} type="number" value={vehicle[key]} onChange={value => updateVehicle(vehicle.id, { [key]: Number(value) })} />)}
-                <RemoveButton label="Remover veículo" onClick={() => updateData({ vehicles: (data.vehicles || []).filter(item => item.id !== vehicle.id) })} />
+                <div className="flex items-end gap-1">
+                  <CopyOrvCodeButton getCode={() => encodeEidosVehicleToOrvCode(vehicle)} className="mb-1 text-[#5143a0]" />
+                  <RemoveButton label="Remover veículo" onClick={() => updateData({ vehicles: (data.vehicles || []).filter(item => item.id !== vehicle.id) })} />
+                </div>
               </div>
                 <div className="mt-4 rounded-lg bg-[#6c4fd1]/[0.04] p-3 text-xs font-medium text-[#403b68]">
                   Integridade: {vehicle.currentPV} / {vehicle.maxPV}
@@ -877,6 +900,8 @@ export default function EidosSheetEditor({
             </button>
           ))}
         </nav>
+
+        <OficinaCodeBar character={character} onApply={onChange} variant="eidos" />
 
         {activeTab === 'Ficha' && renderSheetTab()}
         {activeTab === 'CADs e Magias' && renderMagicTab()}
