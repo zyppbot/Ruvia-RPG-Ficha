@@ -1,6 +1,22 @@
-import { useEffect } from 'react';
-import { ExternalLink, Home, Layers, Share2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  ArrowLeft,
+  Check,
+  FolderMinus,
+  FolderPlus,
+  Home,
+  Layers,
+  Plus,
+  Share2,
+  Trash2,
+  X,
+} from 'lucide-react';
 import type { CharacterSheet } from './types';
+
+export interface FolderOption {
+  id: string;
+  name: string;
+}
 
 export interface OpenSheetTab {
   id: string;
@@ -111,23 +127,43 @@ export function SheetTabsBar({
 
 export function CardContextMenu({
   state,
+  folders,
+  characterFolderIds,
   isOpenInTab,
   onClose,
-  onOpen,
   onOpenNewTab,
   onOpenBackgroundTab,
   onCloseTab,
+  onMoveToFolder,
+  onCreateAndMoveToFolder,
+  onRemoveFromFolders,
   onShare,
+  onDelete,
 }: {
   state: { x: number; y: number; character: CharacterSheet } | null;
+  folders: FolderOption[];
+  characterFolderIds: string[];
   isOpenInTab: boolean;
   onClose: () => void;
-  onOpen: (id: string) => void;
   onOpenNewTab: (id: string) => void;
   onOpenBackgroundTab: (id: string) => void;
   onCloseTab: (id: string) => void;
-  onShare?: (character: CharacterSheet) => void;
+  onMoveToFolder: (characterId: string, folderId: string) => void;
+  onCreateAndMoveToFolder: (characterId: string, folderName: string) => void;
+  onRemoveFromFolders: (characterId: string, folderIds: string[]) => void;
+  onShare: (character: CharacterSheet) => void;
+  onDelete: (characterId: string) => void;
 }) {
+  const [mode, setMode] = useState<'main' | 'move' | 'remove' | 'delete'>('main');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [selectedRemoveIds, setSelectedRemoveIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setMode('main');
+    setNewFolderName('');
+    setSelectedRemoveIds([]);
+  }, [state]);
+
   useEffect(() => {
     if (!state) return;
     const handleKey = (event: KeyboardEvent) => {
@@ -136,20 +172,25 @@ export function CardContextMenu({
     const handlePointer = () => onClose();
     window.addEventListener('keydown', handleKey);
     window.addEventListener('click', handlePointer);
-    window.addEventListener('scroll', handlePointer, true);
     return () => {
       window.removeEventListener('keydown', handleKey);
       window.removeEventListener('click', handlePointer);
-      window.removeEventListener('scroll', handlePointer, true);
     };
   }, [state, onClose]);
 
   if (!state) return null;
 
-  const menuWidth = 248;
-  const menuHeight = (isOpenInTab ? 180 : 145) + (onShare ? 36 : 0);
+  const assignedFolders = folders.filter(folder => characterFolderIds.includes(folder.id));
+  const menuWidth = mode === 'main' ? 276 : 300;
+  const estimatedHeight = mode === 'main' ? 245 : 320;
   const left = typeof window !== 'undefined' ? Math.max(8, Math.min(state.x, window.innerWidth - menuWidth - 8)) : state.x;
-  const top = typeof window !== 'undefined' ? Math.max(8, Math.min(state.y, window.innerHeight - menuHeight - 8)) : state.y;
+  const top = typeof window !== 'undefined' ? Math.max(8, Math.min(state.y, window.innerHeight - estimatedHeight - 8)) : state.y;
+
+  const toggleRemoveFolder = (folderId: string) => {
+    setSelectedRemoveIds(prev =>
+      prev.includes(folderId) ? prev.filter(id => id !== folderId) : [...prev, folderId]
+    );
+  };
 
   return (
     <div
@@ -158,74 +199,278 @@ export function CardContextMenu({
       style={{ left, top, width: menuWidth }}
       onClick={event => event.stopPropagation()}
       onContextMenu={event => event.preventDefault()}
-      className="fixed z-50 rounded-sm border border-amber-400/40 bg-[#111319] p-1.5 text-xs text-slate-100 shadow-2xl"
+      className="fixed z-50 max-h-[75vh] overflow-y-auto rounded-sm border border-amber-400/40 bg-[#111319] p-1.5 text-xs text-slate-100 shadow-2xl"
     >
-      <div className="border-b border-white/10 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-300/80 truncate">
-        {state.character.name || 'Sem nome'}
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 px-2.5 py-1.5">
+        {mode !== 'main' ? (
+          <button
+            type="button"
+            onClick={() => setMode('main')}
+            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-amber-300"
+          >
+            <ArrowLeft size={12} />
+            <span>Voltar</span>
+          </button>
+        ) : null}
+        <span className="truncate text-[10px] font-bold uppercase tracking-wider text-amber-300/85">
+          {state.character.name || 'Sem nome'}
+        </span>
       </div>
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => {
-          onOpen(state.character.id);
-          onClose();
-        }}
-        className="mt-1 flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left hover:bg-white/10"
-      >
-        <ExternalLink size={13} className="text-amber-300" />
-        <span>Abrir ficha</span>
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => {
-          onOpenNewTab(state.character.id);
-          onClose();
-        }}
-        className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left hover:bg-white/10"
-      >
-        <Layers size={13} className="text-amber-300" />
-        <span>Abrir em nova guia</span>
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => {
-          onOpenBackgroundTab(state.character.id);
-          onClose();
-        }}
-        className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-slate-300 hover:bg-white/10 hover:text-white"
-      >
-        <Layers size={13} className="text-slate-400" />
-        <span>Abrir em nova guia (2º plano)</span>
-      </button>
-      {onShare && (
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            onShare(state.character);
-            onClose();
-          }}
-          className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-emerald-300 hover:bg-emerald-500/10"
-        >
-          <Share2 size={13} className="text-emerald-400" />
-          <span>{state.character.shareId ? 'Gerenciar link ao vivo' : 'Compartilhar por link'}</span>
-        </button>
+
+      {mode === 'main' && (
+        <div className="mt-1 space-y-0.5">
+          <div className="flex items-center gap-1 rounded-sm hover:bg-white/10">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onOpenNewTab(state.character.id);
+                onClose();
+              }}
+              className="flex flex-1 items-center gap-2 px-2.5 py-2 text-left"
+            >
+              <Layers size={13} className="shrink-0 text-amber-300" />
+              <span>Abrir em nova guia</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenBackgroundTab(state.character.id);
+                onClose();
+              }}
+              title="Abrir em nova guia sem sair do Menu Inicial"
+              className="mr-1 rounded border border-white/15 px-1.5 py-0.5 text-[10px] text-slate-300 hover:border-amber-400/50 hover:text-white"
+            >
+              2º plano
+            </button>
+            {isOpenInTab && (
+              <button
+                type="button"
+                onClick={() => {
+                  onCloseTab(state.character.id);
+                  onClose();
+                }}
+                aria-label="Fechar guia aberta"
+                title="Fechar guia aberta"
+                className="mr-1 rounded p-1 text-rose-300 hover:bg-rose-500/20"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => setMode('move')}
+            className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left hover:bg-white/10"
+          >
+            <FolderPlus size={13} className="shrink-0 text-amber-300" />
+            <span>Mover para...</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setSelectedRemoveIds(assignedFolders.length === 1 ? [assignedFolders[0].id] : []);
+              setMode('remove');
+            }}
+            className="flex w-full items-center justify-between gap-2 rounded-sm px-2.5 py-2 text-left hover:bg-white/10"
+          >
+            <span className="flex items-center gap-2">
+              <FolderMinus size={13} className="shrink-0 text-sky-300" />
+              <span>Remover de...</span>
+            </span>
+            {assignedFolders.length > 0 && (
+              <span className="rounded bg-white/10 px-1.5 text-[10px] text-slate-300">
+                {assignedFolders.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onShare(state.character);
+              onClose();
+            }}
+            className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-emerald-300 hover:bg-emerald-500/10"
+          >
+            <Share2 size={13} className="shrink-0 text-emerald-400" />
+            <span>
+              {state.character.shareId
+                ? 'Gerenciar compartilhamento ao vivo'
+                : 'Ativar compartilhamento em tempo real'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => setMode('delete')}
+            className="mt-1 flex w-full items-center gap-2 border-t border-white/10 px-2.5 py-2 text-left text-rose-300 hover:bg-rose-500/10"
+          >
+            <Trash2 size={13} className="shrink-0" />
+            <span>Excluir ficha</span>
+          </button>
+        </div>
       )}
-      {isOpenInTab && (
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            onCloseTab(state.character.id);
-            onClose();
-          }}
-          className="mt-1 flex w-full items-center gap-2 border-t border-white/10 px-2.5 py-2 text-left text-rose-300 hover:bg-rose-500/10"
-        >
-          <X size={13} />
-          <span>Fechar guia aberta</span>
-        </button>
+
+      {mode === 'move' && (
+        <div className="mt-2 space-y-2.5 px-1.5 pb-1">
+          <form
+            className="flex gap-1.5"
+            onSubmit={event => {
+              event.preventDefault();
+              const trimmed = newFolderName.trim();
+              if (!trimmed) return;
+              onCreateAndMoveToFolder(state.character.id, trimmed);
+              onClose();
+            }}
+          >
+            <input
+              type="text"
+              autoFocus
+              aria-label="Nome da nova pasta"
+              placeholder="Nova pasta..."
+              value={newFolderName}
+              onChange={event => setNewFolderName(event.target.value)}
+              className="min-w-0 flex-1 rounded-sm border border-white/15 bg-black/40 px-2 py-1.5 text-xs text-white outline-none focus:border-amber-400"
+            />
+            <button
+              type="submit"
+              disabled={!newFolderName.trim()}
+              className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-amber-400 px-2.5 py-1.5 text-[11px] font-bold uppercase text-black hover:bg-amber-300 disabled:opacity-40"
+            >
+              <Plus size={12} />
+              <span>Criar</span>
+            </button>
+          </form>
+
+          {folders.length > 0 && (
+            <div className="space-y-1 border-t border-white/10 pt-2">
+              <p className="px-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Adicionar a uma pasta existente
+              </p>
+              {folders.map(folder => {
+                const alreadyIn = characterFolderIds.includes(folder.id);
+                return (
+                  <button
+                    key={folder.id}
+                    type="button"
+                    onClick={() => {
+                      if (!alreadyIn) {
+                        onMoveToFolder(state.character.id, folder.id);
+                        onClose();
+                      }
+                    }}
+                    className={`flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left transition ${
+                      alreadyIn
+                        ? 'bg-emerald-500/10 text-emerald-300'
+                        : 'hover:bg-white/10 text-slate-200'
+                    }`}
+                  >
+                    <span className="truncate">{folder.name}</span>
+                    {alreadyIn ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-300">
+                        <Check size={11} /> Na pasta
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-300">+ Mover</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === 'remove' && (
+        <div className="mt-2 space-y-2.5 px-1.5 pb-1">
+          {assignedFolders.length === 0 ? (
+            <p className="px-1 py-2 text-slate-400">
+              Esta ficha não está vinculada a nenhuma pasta no momento.
+            </p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Selecione as pastas
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedRemoveIds(
+                      selectedRemoveIds.length === assignedFolders.length
+                        ? []
+                        : assignedFolders.map(folder => folder.id)
+                    )
+                  }
+                  className="text-[10px] text-amber-300 hover:underline"
+                >
+                  {selectedRemoveIds.length === assignedFolders.length ? 'Limpar' : 'Todas'}
+                </button>
+              </div>
+              <div className="space-y-1">
+                {assignedFolders.map(folder => (
+                  <label
+                    key={folder.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-white/10"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedRemoveIds.includes(folder.id)}
+                      onChange={() => toggleRemoveFolder(folder.id)}
+                      className="accent-amber-400"
+                    />
+                    <span className="truncate">{folder.name}</span>
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={selectedRemoveIds.length === 0}
+                onClick={() => {
+                  onRemoveFromFolders(state.character.id, selectedRemoveIds);
+                  onClose();
+                }}
+                className="w-full rounded-sm bg-sky-400 px-3 py-1.5 text-[11px] font-bold uppercase text-slate-950 hover:bg-sky-300 disabled:opacity-40"
+              >
+                Remover das pastas ({selectedRemoveIds.length})
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === 'delete' && (
+        <div className="mt-2 space-y-3 px-2 pb-1.5">
+          <p className="leading-relaxed text-slate-300">
+            Tem certeza que deseja excluir <strong className="text-white">{state.character.name || 'esta ficha'}</strong>? Esta ação não pode ser desfeita.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setMode('main')}
+              className="rounded border border-white/15 px-2.5 py-1 text-slate-300 hover:bg-white/10"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onDelete(state.character.id);
+                onClose();
+              }}
+              className="rounded bg-rose-600 px-3 py-1 font-bold uppercase text-white hover:bg-rose-500"
+            >
+              Excluir
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

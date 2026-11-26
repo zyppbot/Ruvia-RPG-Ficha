@@ -3,6 +3,7 @@ import {
   initializeFirestore,
   getFirestore,
   doc,
+  getDoc,
   setDoc,
   updateDoc,
   onSnapshot,
@@ -56,7 +57,61 @@ export function sanitizeSheetForCloud(sheet: CharacterSheet): CharacterSheet {
   const cloned = JSON.parse(JSON.stringify(sheet)) as CharacterSheet;
   delete cloned.shareOwnerSecret;
   delete cloned.folderId;
+  delete cloned.folderIds;
   return cloned;
+}
+
+export function extractShareIdFromInput(rawInput: string): string | null {
+  const trimmed = rawInput.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes('share=')) {
+    try {
+      const parsedUrl = trimmed.startsWith('http')
+        ? new URL(trimmed)
+        : new URL(
+            trimmed.startsWith('?')
+              ? `https://ruvia.local/${trimmed}`
+              : `https://ruvia.local/?${trimmed.split('?').pop() || ''}`
+          );
+      const share = parsedUrl.searchParams.get('share')?.trim();
+      if (share && /^[A-Za-z0-9_-]{8,64}$/.test(share)) return share;
+    } catch {
+      const match = trimmed.match(/[?&]share=([A-Za-z0-9_-]{8,64})/);
+      if (match?.[1]) return match[1];
+    }
+  }
+  if (/^[A-Za-z0-9_-]{12,64}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return null;
+}
+
+export async function fetchSharedSheetOnce(shareId: string): Promise<{
+  sheet: CharacterSheet;
+  ownerHash: string;
+}> {
+  const db = getDb();
+  try {
+    const snapshot = await getDoc(doc(db, 'sharedSheets', shareId));
+    if (!snapshot.exists()) {
+      throw new Error('Link inválido ou ficha não encontrada.');
+    }
+    const data = snapshot.data() as {
+      revoked?: boolean;
+      ownerHash?: string;
+      sheet?: CharacterSheet;
+    };
+    if (data.revoked || !data.sheet || !data.ownerHash) {
+      throw new Error('Este compartilhamento foi encerrado pelo dono.');
+    }
+    return { sheet: data.sheet, ownerHash: data.ownerHash };
+  } catch (err) {
+    const code = (err as { code?: string })?.code || '';
+    if (code === 'permission-denied' || code === 'not-found') {
+      throw new Error('Este compartilhamento foi encerrado pelo dono ou não existe.');
+    }
+    throw err;
+  }
 }
 
 export function buildShareUrl(shareId: string): string {

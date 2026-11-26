@@ -46,6 +46,7 @@ import {
   Folder,
   FolderPlus,
   Filter,
+  Link2,
   Radio,
   X
 } from 'lucide-react';
@@ -83,6 +84,8 @@ import { ShareLinkDialog } from './ShareLinkDialog';
 import {
   CLIENT_ID,
   createShareLink,
+  extractShareIdFromInput,
+  fetchSharedSheetOnce,
   generateRandomToken,
   pushSharedSheetUpdate,
   revokeShareLink,
@@ -90,6 +93,22 @@ import {
   subscribeToSharedSheet,
 } from './firebaseSync';
 const EidosSheetEditor = React.lazy(() => import('./EidosSheetEditor'));
+
+const SHARED_FOLDER_ID = 'compartilhados';
+const SHARED_FOLDER_NAME = 'Compartilhados';
+
+function getCharacterFolderIds(character: CharacterSheet): string[] {
+  const ids = new Set<string>();
+  if (Array.isArray(character.folderIds)) {
+    for (const id of character.folderIds) {
+      if (id) ids.add(id);
+    }
+  }
+  if (character.folderId) {
+    ids.add(character.folderId);
+  }
+  return Array.from(ids);
+}
 
 function normalizeCharacterSheet(char: Partial<CharacterSheet>, fallbackId?: string): CharacterSheet {
   const defaultShipData = createShipData();
@@ -262,14 +281,21 @@ export default function App() {
   const [shareDialogTargetId, setShareDialogTargetId] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [shareLinkInput, setShareLinkInput] = useState('');
+  const [shareLinkBusy, setShareLinkBusy] = useState(false);
+  const [shareLinkFeedback, setShareLinkFeedback] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
   const [selectedSupplements, setSelectedSupplements] = useState<CharacterSupplement[]>([]);
   const [selectedLevels, setSelectedLevels] = useState<CharacterLevel[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const charactersRef = useRef<CharacterSheet[]>(characters);
   charactersRef.current = characters;
+  const foldersRef = useRef<CharacterFolder[]>(folders);
+  foldersRef.current = folders;
   const guestSheetsRef = useRef<Record<string, CharacterSheet>>(guestSheets);
   guestSheetsRef.current = guestSheets;
+  const charactersLoadFailedRef = useRef(false);
+  const foldersLoadFailedRef = useRef(false);
   const ownerHashByShareIdRef = useRef<Record<string, string>>({});
   const syncTimersRef = useRef<Record<string, number>>({});
   const latestPendingSheetRef = useRef<Record<string, CharacterSheet>>({});
@@ -282,8 +308,11 @@ export default function App() {
     const saved = localStorage.getItem('ruvia_characters');
     if (saved) {
       try {
-        const parsed = JSON.parse(saved) as CharacterSheet[];
-        setCharacters(parsed.map(char => ({
+        const parsed = JSON.parse(saved);
+        if (!Array.isArray(parsed)) {
+          throw new Error('Formato inesperado de ruvia_characters');
+        }
+        setCharacters(parsed.map((char: CharacterSheet) => ({
           ...INITIAL_CHARACTER,
           ...char,
           stats: {
@@ -297,15 +326,21 @@ export default function App() {
         })));
       } catch (e) {
         console.error("Erro ao carregar do local storage", e);
+        charactersLoadFailedRef.current = true;
         setCharacters([]);
       }
     }
     const savedFolders = localStorage.getItem('ruvia_folders');
     if (savedFolders) {
       try {
-        setFolders(JSON.parse(savedFolders) as CharacterFolder[]);
+        const parsedFolders = JSON.parse(savedFolders);
+        if (!Array.isArray(parsedFolders)) {
+          throw new Error('Formato inesperado de ruvia_folders');
+        }
+        setFolders(parsedFolders as CharacterFolder[]);
       } catch (error) {
         console.error('Erro ao carregar pastas locais', error);
+        foldersLoadFailedRef.current = true;
         setFolders([]);
       }
     }
@@ -313,13 +348,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!loading) {
+    if (!loading && !charactersLoadFailedRef.current) {
       localStorage.setItem('ruvia_characters', JSON.stringify(characters));
     }
   }, [characters, loading]);
 
   useEffect(() => {
-    if (!loading) {
+    if (!loading && !foldersLoadFailedRef.current) {
       localStorage.setItem('ruvia_folders', JSON.stringify(folders));
     }
   }, [folders, loading]);
@@ -394,6 +429,7 @@ export default function App() {
                   ...normalized,
                   id: char.id,
                   folderId: char.folderId,
+                  folderIds: char.folderIds,
                   shareId: char.shareId,
                   shareOwnerSecret: char.shareOwnerSecret,
                 };
@@ -696,12 +732,13 @@ export default function App() {
     openCharacterInTab(copyId, true);
   };
 
-  const exportCharacters = (list: CharacterSheet[] = characters) => {
-    const backupCharacters = list.map(({ folderId: _folderId, ...character }) => character);
+  const exportCharacters = (list?: CharacterSheet[]) => {
+    const targetList = Array.isArray(list) ? list : characters;
+    const backupCharacters = targetList.map(({ folderId: _folderId, folderIds: _folderIds, ...character }) => character);
     const dataStr = JSON.stringify(backupCharacters, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-    const safeCharacterName = (list[0]?.name || 'backup').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'backup';
-    const exportFileDefaultName = list.length === 1
+    const safeCharacterName = (targetList[0]?.name || 'backup').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'backup';
+    const exportFileDefaultName = targetList.length === 1
       ? `ruvia_personagem_${safeCharacterName}.json`
       : 'ruvia_personagens_backup.json';
     const linkElement = document.createElement('a');
@@ -1305,8 +1342,8 @@ export default function App() {
     ? (activeCharacter.supplementData?.attributePoints ?? 8) < 0
     : isAdAstra && Object.values(activeCharacter.attributes).some(value => value > totalLevel + 3);
 
-  const deleteCharacter = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const deleteCharacter = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     const target = characters.find(c => c.id === id);
     if (target?.shareId && target.shareOwnerSecret) {
       if (syncTimersRef.current[target.shareId]) {
@@ -1320,6 +1357,29 @@ export default function App() {
     if (activeId === id) setActiveId(null);
   };
 
+  const ensureSharedFolder = (): string => {
+    const existing = foldersRef.current.find(
+      folder =>
+        folder.id === SHARED_FOLDER_ID ||
+        folder.name.trim().toLowerCase() === SHARED_FOLDER_NAME.toLowerCase()
+    );
+    if (existing) return existing.id;
+    const created: CharacterFolder = { id: SHARED_FOLDER_ID, name: SHARED_FOLDER_NAME };
+    setFolders(previous => {
+      if (
+        previous.some(
+          folder =>
+            folder.id === SHARED_FOLDER_ID ||
+            folder.name.trim().toLowerCase() === SHARED_FOLDER_NAME.toLowerCase()
+        )
+      ) {
+        return previous;
+      }
+      return [...previous, created];
+    });
+    return created.id;
+  };
+
   const createFolder = () => {
     const name = newFolderName.trim();
     if (!name) return;
@@ -1329,21 +1389,165 @@ export default function App() {
     setNewFolderName('');
   };
 
-  const moveCharacterToFolder = (characterId: string, folderId?: string) => {
-    setCharacters(previous => previous.map(character => {
-      if (character.id !== characterId) return character;
-      const { folderId: _previousFolderId, ...withoutFolder } = character;
-      return folderId ? { ...withoutFolder, folderId } : withoutFolder;
-    }));
+  const addCharacterToFolder = (characterId: string, folderId: string) => {
+    setCharacters(previous =>
+      previous.map(character => {
+        if (character.id !== characterId) return character;
+        const currentIds = getCharacterFolderIds(character);
+        const nextIds = currentIds.includes(folderId) ? currentIds : [...currentIds, folderId];
+        return {
+          ...character,
+          folderId: nextIds[0],
+          folderIds: nextIds,
+        };
+      })
+    );
+  };
+
+  const createAndMoveToFolder = (characterId: string, folderName: string) => {
+    const trimmed = folderName.trim();
+    if (!trimmed) return;
+    const existing = foldersRef.current.find(
+      folder => folder.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing) {
+      addCharacterToFolder(characterId, existing.id);
+      return;
+    }
+    const newFolder: CharacterFolder = { id: crypto.randomUUID(), name: trimmed };
+    setFolders(previous => [...previous, newFolder]);
+    addCharacterToFolder(characterId, newFolder.id);
+  };
+
+  const removeCharacterFromFolders = (characterId: string, folderIdsToRemove: string[]) => {
+    if (folderIdsToRemove.length === 0) return;
+    const removeSet = new Set(folderIdsToRemove);
+    setCharacters(previous =>
+      previous.map(character => {
+        if (character.id !== characterId) return character;
+        const nextIds = getCharacterFolderIds(character).filter(id => !removeSet.has(id));
+        const { folderId: _prevId, folderIds: _prevIds, ...rest } = character;
+        if (nextIds.length === 0) return rest;
+        return {
+          ...rest,
+          folderId: nextIds[0],
+          folderIds: nextIds,
+        };
+      })
+    );
+  };
+
+  const clearCharacterFolders = (characterId: string) => {
+    setCharacters(previous =>
+      previous.map(character => {
+        if (character.id !== characterId) return character;
+        const { folderId: _prevId, folderIds: _prevIds, ...rest } = character;
+        return rest;
+      })
+    );
+  };
+
+  const handleAddSharedLinkFromHome = async (rawInput: string) => {
+    const shareId = extractShareIdFromInput(rawInput);
+    if (!shareId) {
+      setShareLinkFeedback({
+        type: 'error',
+        text: 'Link inválido. Cole o link completo compartilhado (?share=...) ou o código do link.',
+      });
+      return;
+    }
+
+    setShareLinkBusy(true);
+    setShareLinkFeedback(null);
+
+    try {
+      const existing = charactersRef.current.find(char => char.shareId === shareId);
+      if (existing) {
+        if (existing.shareOwnerSecret) {
+          setShareLinkFeedback({
+            type: 'ok',
+            text: `"${existing.name}" já é uma ficha sua neste navegador.`,
+          });
+          openCharacterInTab(existing.id, true);
+          setShareLinkInput('');
+          return;
+        }
+        const sharedFolderId = ensureSharedFolder();
+        addCharacterToFolder(existing.id, sharedFolderId);
+        setActiveFolderFilter(sharedFolderId);
+        setShareLinkInput('');
+        setShareLinkFeedback({
+          type: 'ok',
+          text: `"${existing.name}" já está registrada em ${SHARED_FOLDER_NAME} com sincronização ao vivo.`,
+        });
+        return;
+      }
+
+      const { sheet, ownerHash } = await fetchSharedSheetOnce(shareId);
+      ownerHashByShareIdRef.current[shareId] = ownerHash;
+      const sharedFolderId = ensureSharedFolder();
+      const localId = Math.random().toString(36).slice(2, 10);
+      const normalized = normalizeCharacterSheet(sheet, localId);
+      const { shareOwnerSecret: _droppedSecret, ...safeSheet } = normalized;
+      const registeredSheet: CharacterSheet = {
+        ...safeSheet,
+        id: localId,
+        shareId,
+        folderId: sharedFolderId,
+        folderIds: [sharedFolderId],
+      };
+      skipNextMaxStatsDeltaRef.current.add(localId);
+      setCharacters(previous => [...previous, registeredSheet]);
+      setShareLinkInput('');
+      setActiveFolderFilter(sharedFolderId);
+      setShareLinkFeedback({
+        type: 'ok',
+        text: `Ficha "${registeredSheet.name || 'Sem nome'}" adicionada na pasta "${SHARED_FOLDER_NAME}" ao vivo!`,
+      });
+    } catch (err) {
+      setShareLinkFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Não foi possível adicionar o link compartilhado.',
+      });
+    } finally {
+      setShareLinkBusy(false);
+    }
+  };
+
+  const handleSaveGuestSheetToSharedFolder = () => {
+    if (!activeGuestShareId || !guestSheets[activeGuestShareId]) return;
+    const sharedFolderId = ensureSharedFolder();
+    const existing = charactersRef.current.find(c => c.shareId === activeGuestShareId);
+    if (existing) {
+      addCharacterToFolder(existing.id, sharedFolderId);
+      openCharacterInTab(existing.id, true);
+      return;
+    }
+    const localId = Math.random().toString(36).slice(2, 10);
+    const { shareOwnerSecret: _sec, ...base } = guestSheets[activeGuestShareId];
+    const registeredSheet: CharacterSheet = {
+      ...base,
+      id: localId,
+      shareId: activeGuestShareId,
+      folderId: sharedFolderId,
+      folderIds: [sharedFolderId],
+    };
+    setCharacters(prev => [...prev, registeredSheet]);
+    openCharacterInTab(localId, true);
   };
 
   const deleteFolder = (folderId: string) => {
     setFolders(previous => previous.filter(folder => folder.id !== folderId));
-    setCharacters(previous => previous.map(character => {
-      if (character.folderId !== folderId) return character;
-      const { folderId: _removedFolderId, ...withoutFolder } = character;
-      return withoutFolder;
-    }));
+    setCharacters(previous =>
+      previous.map(character => {
+        const currentIds = getCharacterFolderIds(character);
+        if (!currentIds.includes(folderId)) return character;
+        const nextIds = currentIds.filter(id => id !== folderId);
+        const { folderId: _prevId, folderIds: _prevIds, ...rest } = character;
+        if (nextIds.length === 0) return rest;
+        return { ...rest, folderId: nextIds[0], folderIds: nextIds };
+      })
+    );
     if (activeFolderFilter === folderId) setActiveFolderFilter('all');
   };
 
@@ -1354,10 +1558,13 @@ export default function App() {
     if (name) setFolders(previous => previous.map(folder => folder.id === folderId ? { ...folder, name } : folder));
   };
 
+  const validFolderIds = useMemo(() => new Set(folders.map(folder => folder.id)), [folders]);
+
   const visibleCharacters = characters.filter(character => {
+    const charFolders = getCharacterFolderIds(character).filter(id => validFolderIds.has(id));
     if (activeFolderFilter === 'all') return true;
-    if (activeFolderFilter === 'unfiled') return !character.folderId || !folders.some(folder => folder.id === character.folderId);
-    return character.folderId === activeFolderFilter;
+    if (activeFolderFilter === 'unfiled') return charFolders.length === 0;
+    return charFolders.includes(activeFolderFilter);
   }).filter(character =>
     selectedSupplements.length === 0 || selectedSupplements.includes(character.supplement || 'modulo-basico')
   ).filter(character =>
@@ -1415,7 +1622,11 @@ export default function App() {
   const shareDialog = (
     <ShareLinkDialog
       character={shareDialogCharacter}
-      isGuestView={Boolean(shareDialogTargetId?.startsWith('shared:'))}
+      isGuestView={Boolean(
+        shareDialogCharacter &&
+          (shareDialogTargetId?.startsWith('shared:') ||
+            (shareDialogCharacter.shareId && !shareDialogCharacter.shareOwnerSecret))
+      )}
       busy={shareBusy}
       error={shareError}
       onClose={() => {
@@ -1440,7 +1651,11 @@ export default function App() {
     />
   );
 
-  const guestBanner = isGuestActive && activeGuestShareId && activeGuestStatus === 'ready' ? (
+  const isCollaboratorOnActiveSheet =
+    (isGuestActive && activeGuestShareId && activeGuestStatus === 'ready') ||
+    (!isGuestActive && Boolean(activeCharacter.shareId && !activeCharacter.shareOwnerSecret));
+
+  const guestBanner = isCollaboratorOnActiveSheet ? (
     <div className="border-b border-emerald-500/30 bg-emerald-950/85 px-4 py-2 text-xs text-emerald-100">
       <div className="mx-auto flex max-w-[1024px] flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -1449,13 +1664,24 @@ export default function App() {
             <strong>Modo compartilhado em tempo real:</strong> edições sincronizadas simultaneamente com o dono desta ficha.
           </span>
         </div>
-        <button
-          type="button"
-          onClick={handleDuplicateGuestToLocal}
-          className="rounded border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-200 hover:bg-emerald-500/30"
-        >
-          Salvar cópia local
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {isGuestActive && (
+            <button
+              type="button"
+              onClick={handleSaveGuestSheetToSharedFolder}
+              className="rounded border border-emerald-400/60 bg-emerald-500/25 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-100 hover:bg-emerald-500/40"
+            >
+              Salvar em Compartilhados
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleDuplicateGuestToLocal}
+            className="rounded border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-200 hover:bg-emerald-500/30"
+          >
+            Salvar cópia local
+          </button>
+        </div>
       </div>
     </div>
   ) : null;
@@ -1469,16 +1695,18 @@ export default function App() {
           {importDialog}
           <CardContextMenu
             state={contextMenu}
+            folders={folders}
+            characterFolderIds={contextMenu ? getCharacterFolderIds(contextMenu.character) : []}
             isOpenInTab={Boolean(contextMenu && openTabIds.includes(contextMenu.character.id))}
             onClose={() => setContextMenu(null)}
-            onOpen={id => {
-              setActiveId(id);
-              setView('sheet');
-            }}
             onOpenNewTab={id => openCharacterInTab(id, true)}
             onOpenBackgroundTab={id => openCharacterInTab(id, false)}
             onCloseTab={closeSheetTab}
+            onMoveToFolder={addCharacterToFolder}
+            onCreateAndMoveToFolder={createAndMoveToFolder}
+            onRemoveFromFolders={removeCharacterFromFolders}
             onShare={handleOpenShareDialog}
+            onDelete={id => deleteCharacter(id)}
           />
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-ruvia-accent pb-6">
           <div>
@@ -1504,7 +1732,8 @@ export default function App() {
               <Upload size={16} /> Carregar Backup
             </button>
             <button 
-              onClick={exportCharacters}
+              type="button"
+              onClick={() => exportCharacters()}
               className="px-4 py-2 flex items-center gap-2 font-bold uppercase text-xs text-ruvia-accent/60 hover:text-ruvia-accent transition-colors border border-ruvia-accent/20 rounded-sm"
             >
               <Download size={16} /> Salvar Backup
@@ -1595,6 +1824,46 @@ export default function App() {
           </div>
         </header>
 
+        <section className="rounded-sm border border-emerald-400/25 bg-emerald-950/20 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-emerald-300">
+              <Link2 size={15} /> Receber ficha compartilhada por link
+            </div>
+            <form
+              className="flex flex-1 max-w-xl gap-2"
+              onSubmit={event => {
+                event.preventDefault();
+                void handleAddSharedLinkFromHome(shareLinkInput);
+              }}
+            >
+              <input
+                type="text"
+                aria-label="Link de compartilhamento recebido"
+                placeholder="Cole o link compartilhado (?share=...) para registrar ao vivo"
+                value={shareLinkInput}
+                onChange={event => {
+                  setShareLinkInput(event.target.value);
+                  if (shareLinkFeedback) setShareLinkFeedback(null);
+                }}
+                className="min-w-0 flex-1 rounded-sm border border-emerald-400/25 bg-ruvia-bg px-3 py-2 text-xs text-white outline-none focus:border-emerald-400"
+              />
+              <button
+                type="submit"
+                disabled={shareLinkBusy || !shareLinkInput.trim()}
+                className="flex shrink-0 items-center gap-1.5 rounded-sm bg-emerald-500 px-3 py-2 text-xs font-bold uppercase text-slate-950 transition hover:bg-emerald-400 disabled:opacity-40"
+              >
+                <Radio size={13} />
+                {shareLinkBusy ? 'Conectando...' : 'Adicionar'}
+              </button>
+            </form>
+          </div>
+          {shareLinkFeedback && (
+            <p className={`mt-2 text-xs ${shareLinkFeedback.type === 'error' ? 'text-rose-300' : 'text-emerald-300'}`}>
+              {shareLinkFeedback.text}
+            </p>
+          )}
+        </section>
+
         <section className="rounded-sm border border-ruvia-accent/20 bg-ruvia-panel/30 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-ruvia-accent">
@@ -1630,32 +1899,56 @@ export default function App() {
               onDrop={event => {
                 event.preventDefault();
                 const characterId = event.dataTransfer.getData('text/character-id');
-                if (characterId) moveCharacterToFolder(characterId);
+                if (characterId) clearCharacterFolders(characterId);
               }}
               className={`rounded-sm border px-3 py-1.5 text-xs uppercase ${activeFolderFilter === 'unfiled' ? 'border-ruvia-accent bg-ruvia-accent/10 text-ruvia-accent' : 'border-white/10 text-white/60'}`}
             >
-              Sem pasta ({characters.filter(character => !character.folderId || !folders.some(folder => folder.id === character.folderId)).length})
+              Sem pasta ({characters.filter(character => getCharacterFolderIds(character).filter(id => validFolderIds.has(id)).length === 0).length})
             </button>
-            {folders.map(folder => (
-              <div
-                key={folder.id}
-                className={`flex items-center rounded-sm border ${activeFolderFilter === folder.id ? 'border-ruvia-accent bg-ruvia-accent/10' : 'border-white/10'}`}
-                onDragOver={event => event.preventDefault()}
-                onDrop={event => {
-                  event.preventDefault();
-                  const characterId = event.dataTransfer.getData('text/character-id');
-                  if (characterId) moveCharacterToFolder(characterId, folder.id);
-                }}
-              >
-                <button type="button" onClick={() => setActiveFolderFilter(folder.id)} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs uppercase ${activeFolderFilter === folder.id ? 'text-ruvia-accent' : 'text-white/60'}`}>
-                  <Folder size={13} /> {folder.name} ({characters.filter(character => character.folderId === folder.id).length})
-                </button>
-                <button type="button" aria-label={`Renomear pasta ${folder.name}`} onClick={() => renameFolder(folder.id)} className="px-1 text-[10px] text-white/40 hover:text-ruvia-accent">✎</button>
-                <button type="button" aria-label={`Excluir pasta ${folder.name}`} onClick={() => deleteFolder(folder.id)} className="px-2 text-white/40 hover:text-red-400"><X size={12} /></button>
-              </div>
-            ))}
+            {folders.map(folder => {
+              const isSharedSpecial = folder.id === SHARED_FOLDER_ID || folder.name.trim().toLowerCase() === SHARED_FOLDER_NAME.toLowerCase();
+              const count = characters.filter(character => getCharacterFolderIds(character).includes(folder.id)).length;
+              return (
+                <div
+                  key={folder.id}
+                  className={`flex items-center rounded-sm border ${
+                    activeFolderFilter === folder.id
+                      ? isSharedSpecial
+                        ? 'border-emerald-400 bg-emerald-500/15'
+                        : 'border-ruvia-accent bg-ruvia-accent/10'
+                      : isSharedSpecial
+                        ? 'border-emerald-400/30 bg-emerald-950/20'
+                        : 'border-white/10'
+                  }`}
+                  onDragOver={event => event.preventDefault()}
+                  onDrop={event => {
+                    event.preventDefault();
+                    const characterId = event.dataTransfer.getData('text/character-id');
+                    if (characterId) addCharacterToFolder(characterId, folder.id);
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveFolderFilter(folder.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs uppercase ${
+                      activeFolderFilter === folder.id
+                        ? isSharedSpecial
+                          ? 'text-emerald-300'
+                          : 'text-ruvia-accent'
+                        : isSharedSpecial
+                          ? 'text-emerald-200/80'
+                          : 'text-white/60'
+                    }`}
+                  >
+                    {isSharedSpecial ? <Radio size={13} className="text-emerald-400" /> : <Folder size={13} />} {folder.name} ({count})
+                  </button>
+                  <button type="button" aria-label={`Renomear pasta ${folder.name}`} onClick={() => renameFolder(folder.id)} className="px-1 text-[10px] text-white/40 hover:text-ruvia-accent">✎</button>
+                  <button type="button" aria-label={`Excluir pasta ${folder.name}`} onClick={() => deleteFolder(folder.id)} className="px-2 text-white/40 hover:text-red-400"><X size={12} /></button>
+                </div>
+              );
+            })}
           </div>
-          <p className="mt-2 text-[10px] text-white/40">Arraste uma ficha para uma pasta. Clique com o botão direito em qualquer ficha para abrir em nova guia dentro do site.</p>
+          <p className="mt-2 text-[10px] text-white/40">Arraste uma ficha para uma pasta ou clique com o botão direito em qualquer card para abrir em nova guia, mover/remover pastas, compartilhar ao vivo ou excluir.</p>
         </section>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1782,14 +2075,29 @@ export default function App() {
                       </span>
                     ))}
                   </div>
-                  <p className={`mt-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.12em] ${char.kind === 'nave' ? 'text-sky-300' : char.supplement === 'eidos' ? 'text-[#b9a7f3]' : 'text-ruvia-accent/80'}`}>
+                  <p className={`mt-2 flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.12em] ${char.kind === 'nave' ? 'text-sky-300' : char.supplement === 'eidos' ? 'text-[#b9a7f3]' : 'text-ruvia-accent/80'}`}>
                     <span>{SUPPLEMENT_CARD_LABELS[char.supplement || 'modulo-basico']}</span>
                     {char.shareId && (
-                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                      <span
+                        title="Compartilhamento em tempo real ativo"
+                        className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300"
+                      >
                         <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         Live
                       </span>
                     )}
+                    {getCharacterFolderIds(char)
+                      .map(fid => folders.find(f => f.id === fid))
+                      .filter((folder): folder is CharacterFolder => Boolean(folder))
+                      .map(folder => (
+                        <span
+                          key={folder.id}
+                          className="inline-flex items-center gap-1 rounded border border-white/15 bg-black/25 px-1.5 py-0.5 text-[9px] font-semibold text-white/75"
+                        >
+                          <Folder size={9} />
+                          {folder.name}
+                        </span>
+                      ))}
                   </p>
                 </div>
                 <div className="text-right">
@@ -1875,14 +2183,6 @@ export default function App() {
                 <span className="text-[10px] uppercase tracking-widest text-ruvia-accent flex items-center gap-1">
                   Ver Ficha <ChevronRight size={12} />
                 </span>
-                {characters.length > 1 && (
-                  <button 
-                    onClick={(e) => deleteCharacter(char.id, e)}
-                    className="text-red-500/50 hover:text-red-500 p-1 transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
               </div>
             </motion.div>
           ))}
