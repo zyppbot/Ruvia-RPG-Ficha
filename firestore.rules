@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidShareId(id) {
+      return id is string && id.size() >= 16 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    match /sharedSheets/{shareId} {
+      allow list: if false;
+
+      allow get: if isValidShareId(shareId) && existing().revoked != true;
+
+      allow create: if isValidShareId(shareId)
+        && incoming().ownerHash is string
+        && incoming().ownerHash.size() == 64
+        && incoming().revoked == false
+        && incoming().sheet is map;
+
+      allow update: if isValidShareId(shareId)
+        && existing().revoked != true
+        && (
+          (
+            incoming().revoked == false
+            && incoming().ownerHash == existing().ownerHash
+            && incoming().sheet is map
+          )
+          ||
+          (
+            incoming().revoked == true
+            && incoming().ownerHash == existing().ownerHash
+            && incoming().revokeProof is string
+            && hashing.sha256(incoming().revokeProof.toUtf8()).toHexString().lower() == existing().ownerHash
+          )
+        );
+
+      allow delete: if false;
+    }
+  }
+}

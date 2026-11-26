@@ -72,11 +72,12 @@ interface PortadoresSheetEditorProps {
   onBack: () => void;
   onSave: () => void;
   onLoad: () => void;
+  onShare?: () => void;
+  isShared?: boolean;
 }
 
-export default function PortadoresSheetEditor({ character, onChange, onBack, onSave, onLoad }: PortadoresSheetEditorProps) {
+export default function PortadoresSheetEditor({ character, onChange, onBack, onSave, onLoad, onShare, isShared }: PortadoresSheetEditorProps) {
   const data = character.supplementData || {};
-  const [shareNotice, setShareNotice] = useState(false);
   const [impetusAdjustment, setImpetusAdjustment] = useState(0);
   const activeFace = data.activeFace || 'civil';
   const civilAttributes = data.civilAttributes || character.attributes;
@@ -236,15 +237,18 @@ export default function PortadoresSheetEditor({ character, onChange, onBack, onS
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={onSave} className="rounded border border-current/30 px-3 py-2 text-xs font-bold uppercase">Salvar backup</button>
             <button type="button" onClick={onLoad} className="rounded border border-current/30 px-3 py-2 text-xs font-bold uppercase">Carregar backup</button>
-            <button type="button" onClick={() => setShareNotice(true)} className="rounded border border-current/30 px-3 py-2 text-xs font-bold uppercase">Compartilhar (em breve)</button>
+            {onShare && (
+              <button
+                type="button"
+                onClick={onShare}
+                className={`flex items-center gap-1.5 rounded border px-3 py-2 text-xs font-bold uppercase ${isShared ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200' : 'border-current/30'}`}
+              >
+                {isShared && <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />}
+                {isShared ? 'Link ao vivo' : 'Compartilhar'}
+              </button>
+            )}
           </div>
         </header>
-
-        {shareNotice && (
-          <div role="status" aria-live="polite" className="rounded border border-current/20 bg-black/10 p-3 text-xs">
-            Compartilhamento simultâneo por link está em desenvolvimento e ainda não está disponível.
-          </div>
-        )}
 
         <OficinaCodeBar character={character} onApply={onChange} variant="portadores" />
 

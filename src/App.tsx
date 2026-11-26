@@ -46,6 +46,7 @@ import {
   Folder,
   FolderPlus,
   Filter,
+  Radio,
   X
 } from 'lucide-react';
 import ShipSheetEditor, { createShipData } from './ShipSheetEditor';
@@ -77,7 +78,61 @@ import NovaVehiclesPanel from './NovaVehiclesPanel';
 import PortadoresSheetEditor from './PortadoresSheetEditor';
 import { OficinaCodeBar, CopyOrvCodeButton } from './OficinaCodeBar';
 import { encodeAbilityToOrvCode, encodeInventoryItemToOrvCode } from './oficinaBridge';
+import { SheetTabsBar, CardContextMenu, type OpenSheetTab } from './SheetTabsBar';
+import { ShareLinkDialog } from './ShareLinkDialog';
+import {
+  CLIENT_ID,
+  createShareLink,
+  generateRandomToken,
+  pushSharedSheetUpdate,
+  revokeShareLink,
+  sha256Hex,
+  subscribeToSharedSheet,
+} from './firebaseSync';
 const EidosSheetEditor = React.lazy(() => import('./EidosSheetEditor'));
+
+function normalizeCharacterSheet(char: Partial<CharacterSheet>, fallbackId?: string): CharacterSheet {
+  const defaultShipData = createShipData();
+  const importedShipData = char.shipData;
+  return {
+    ...INITIAL_CHARACTER,
+    ...char,
+    id: char.id || fallbackId || Math.random().toString(36).slice(2, 10),
+    name: char.name ?? 'Novo Herói',
+    title: char.title ?? 'Aventureiro Iniciante',
+    attributes: { ...INITIAL_CHARACTER.attributes, ...(char.attributes || {}) },
+    stats: {
+      pv: { ...INITIAL_CHARACTER.stats.pv, ...(char.stats?.pv || {}) },
+      pm: { ...INITIAL_CHARACTER.stats.pm, ...(char.stats?.pm || {}) },
+    },
+    specializations: { ...(char.specializations || {}) },
+    skillTraining: { ...(char.skillTraining || {}) },
+    unlockedSkills: char.unlockedSkills || [],
+    inventory: char.inventory || [],
+    abilities: char.abilities || [],
+    quickNote: { ...INITIAL_CHARACTER.quickNote, ...(char.quickNote || {}) },
+    supplement: char.supplement || 'modulo-basico',
+    kind: char.kind || 'personagem',
+    shipData: char.kind === 'nave'
+      ? {
+          ...defaultShipData,
+          ...(importedShipData || {}),
+          attributes: { ...defaultShipData.attributes, ...(importedShipData?.attributes || {}) },
+          resources: {
+            hull: { ...defaultShipData.resources.hull, ...(importedShipData?.resources?.hull || {}) },
+            shields: { ...defaultShipData.resources.shields, ...(importedShipData?.resources?.shields || {}) },
+            energy: { ...defaultShipData.resources.energy, ...(importedShipData?.resources?.energy || {}) },
+            fuel: { ...defaultShipData.resources.fuel, ...(importedShipData?.resources?.fuel || {}) },
+          },
+          activeDamage: importedShipData?.activeDamage || [],
+          crew: importedShipData?.crew || [],
+          systems: importedShipData?.systems || [],
+          modules: importedShipData?.modules || [],
+          inventory: importedShipData?.inventory || [],
+        }
+      : char.shipData,
+  };
+}
 
 interface CharacterFolder {
   id: string;
@@ -189,13 +244,38 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'sheet'>('list');
+  const [openTabIds, setOpenTabIds] = useState<string[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('ruvia_open_tabs');
+      return saved ? (JSON.parse(saved) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; character: CharacterSheet } | null>(null);
   const [newCharacterMenuOpen, setNewCharacterMenuOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pendingImport, setPendingImport] = useState<CharacterSheet[] | null>(null);
-  const [shareNotice, setShareNotice] = useState(false);
+  const [guestSheets, setGuestSheets] = useState<Record<string, CharacterSheet>>({});
+  const [guestStatus, setGuestStatus] = useState<Record<string, 'loading' | 'ready' | 'revoked' | 'not-found' | 'error'>>({});
+  const [guestErrorMessages, setGuestErrorMessages] = useState<Record<string, string>>({});
+  const [shareDialogTargetId, setShareDialogTargetId] = useState<string | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [selectedSupplements, setSelectedSupplements] = useState<CharacterSupplement[]>([]);
   const [selectedLevels, setSelectedLevels] = useState<CharacterLevel[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const charactersRef = useRef<CharacterSheet[]>(characters);
+  charactersRef.current = characters;
+  const guestSheetsRef = useRef<Record<string, CharacterSheet>>(guestSheets);
+  guestSheetsRef.current = guestSheets;
+  const ownerHashByShareIdRef = useRef<Record<string, string>>({});
+  const syncTimersRef = useRef<Record<string, number>>({});
+  const latestPendingSheetRef = useRef<Record<string, CharacterSheet>>({});
+  const pendingMutationIdsRef = useRef<Set<string>>(new Set());
+  const skipNextMaxStatsDeltaRef = useRef<Set<string>>(new Set());
+  const shareParamProcessedRef = useRef(false);
 
   // Load private sheets and folders from this browser.
   useEffect(() => {
@@ -244,9 +324,252 @@ export default function App() {
     }
   }, [folders, loading]);
 
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('ruvia_open_tabs', JSON.stringify(openTabIds));
+    } catch {
+      // ignore sessionStorage quota errors
+    }
+  }, [openTabIds]);
+
+  // Open ?share=<shareId> directly when visiting a shared link.
+  useEffect(() => {
+    if (loading || shareParamProcessedRef.current) return;
+    shareParamProcessedRef.current = true;
+    const shareParam = new URLSearchParams(window.location.search).get('share')?.trim();
+    if (!shareParam) return;
+    const ownSheet = characters.find(c => c.shareId === shareParam);
+    if (ownSheet) {
+      setOpenTabIds(prev => (prev.includes(ownSheet.id) ? prev : [...prev, ownSheet.id]));
+      setActiveId(ownSheet.id);
+      setView('sheet');
+      return;
+    }
+    const guestTabId = `shared:${shareParam}`;
+    setGuestStatus(prev => ({ ...prev, [shareParam]: prev[shareParam] || 'loading' }));
+    setOpenTabIds(prev => (prev.includes(guestTabId) ? prev : [...prev, guestTabId]));
+    setActiveId(guestTabId);
+    setView('sheet');
+  }, [loading, characters]);
+
+  const subscribedShareIdsKey = useMemo(() => {
+    const ids = new Set<string>();
+    for (const char of characters) {
+      if (char.shareId) ids.add(char.shareId);
+    }
+    for (const tabId of openTabIds) {
+      if (tabId.startsWith('shared:')) ids.add(tabId.slice('shared:'.length));
+    }
+    if (activeId && activeId.startsWith('shared:')) {
+      ids.add(activeId.slice('shared:'.length));
+    }
+    return Array.from(ids).sort().join(',');
+  }, [characters, openTabIds, activeId]);
+
+  useEffect(() => {
+    if (loading || !subscribedShareIdsKey) return;
+    const shareIds = subscribedShareIdsKey.split(',').filter(Boolean);
+    const unsubscribes = shareIds.map(shareId =>
+      subscribeToSharedSheet(shareId, {
+        onData: ({ sheet, ownerHash, updatedBy, clientMutationId, fromLocalWrite }) => {
+          ownerHashByShareIdRef.current[shareId] = ownerHash;
+          const isOwnPendingEcho = Boolean(
+            clientMutationId && pendingMutationIdsRef.current.has(clientMutationId)
+          );
+          if (isOwnPendingEcho && clientMutationId) {
+            pendingMutationIdsRef.current.delete(clientMutationId);
+          }
+
+          const localOwner = charactersRef.current.find(c => c.shareId === shareId);
+          if (localOwner) {
+            if (fromLocalWrite || isOwnPendingEcho || updatedBy === CLIENT_ID) {
+              return;
+            }
+            skipNextMaxStatsDeltaRef.current.add(localOwner.id);
+            setCharacters(prev =>
+              prev.map(char => {
+                if (char.shareId !== shareId) return char;
+                const normalized = normalizeCharacterSheet(sheet, char.id);
+                return {
+                  ...normalized,
+                  id: char.id,
+                  folderId: char.folderId,
+                  shareId: char.shareId,
+                  shareOwnerSecret: char.shareOwnerSecret,
+                };
+              })
+            );
+            return;
+          }
+
+          setGuestStatus(prev => (prev[shareId] === 'ready' ? prev : { ...prev, [shareId]: 'ready' }));
+          setGuestErrorMessages(prev => {
+            if (!prev[shareId]) return prev;
+            const copy = { ...prev };
+            delete copy[shareId];
+            return copy;
+          });
+
+          if (fromLocalWrite || isOwnPendingEcho || updatedBy === CLIENT_ID) {
+            if (!guestSheetsRef.current[shareId]) {
+              const normalized = normalizeCharacterSheet(sheet, `shared:${shareId}`);
+              skipNextMaxStatsDeltaRef.current.add(`shared:${shareId}`);
+              setGuestSheets(prev => ({
+                ...prev,
+                [shareId]: { ...normalized, id: `shared:${shareId}`, shareId },
+              }));
+            }
+            return;
+          }
+
+          const normalized = normalizeCharacterSheet(sheet, `shared:${shareId}`);
+          skipNextMaxStatsDeltaRef.current.add(`shared:${shareId}`);
+          setGuestSheets(prev => ({
+            ...prev,
+            [shareId]: { ...normalized, id: `shared:${shareId}`, shareId },
+          }));
+        },
+        onUnavailable: reason => {
+          const localOwner = charactersRef.current.find(c => c.shareId === shareId);
+          if (localOwner) {
+            setCharacters(prev =>
+              prev.map(char => {
+                if (char.shareId !== shareId) return char;
+                const { shareId: _sid, shareOwnerSecret: _sec, ...rest } = char;
+                return rest;
+              })
+            );
+            delete ownerHashByShareIdRef.current[shareId];
+          }
+          setGuestStatus(prev => ({ ...prev, [shareId]: reason }));
+          setGuestSheets(prev => {
+            if (!prev[shareId]) return prev;
+            const next = { ...prev };
+            delete next[shareId];
+            return next;
+          });
+        },
+        onError: err => {
+          setGuestStatus(prev => (prev[shareId] === 'ready' ? prev : { ...prev, [shareId]: 'error' }));
+          setGuestErrorMessages(prev => ({ ...prev, [shareId]: err.message }));
+        },
+      })
+    );
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [loading, subscribedShareIdsKey]);
+
+  const scheduleCloudSync = (shareId: string, nextSheet: CharacterSheet, ownerSecret?: string) => {
+    latestPendingSheetRef.current[shareId] = nextSheet;
+    if (syncTimersRef.current[shareId]) {
+      window.clearTimeout(syncTimersRef.current[shareId]);
+    }
+    syncTimersRef.current[shareId] = window.setTimeout(async () => {
+      delete syncTimersRef.current[shareId];
+      const latestSheet = latestPendingSheetRef.current[shareId];
+      if (!latestSheet) return;
+      let ownerHash = ownerHashByShareIdRef.current[shareId];
+      if (!ownerHash && ownerSecret) {
+        ownerHash = await sha256Hex(ownerSecret);
+        ownerHashByShareIdRef.current[shareId] = ownerHash;
+      }
+      if (!ownerHash) return;
+      const mutationId = generateRandomToken(16);
+      pendingMutationIdsRef.current.add(mutationId);
+      window.setTimeout(() => pendingMutationIdsRef.current.delete(mutationId), 10000);
+      try {
+        await pushSharedSheetUpdate(shareId, ownerHash, latestSheet, mutationId);
+      } catch (err) {
+        console.error('Erro ao sincronizar ficha compartilhada:', err);
+      }
+    }, 120);
+  };
+
+  const openTabs: OpenSheetTab[] = useMemo(() => {
+    const result: OpenSheetTab[] = [];
+    for (const id of openTabIds) {
+      if (id.startsWith('shared:')) {
+        const shareId = id.slice('shared:'.length);
+        const guest = guestSheets[shareId];
+        const status = guestStatus[shareId];
+        result.push({
+          id,
+          label: guest
+            ? (guest.name || 'Ficha compartilhada')
+            : status === 'revoked'
+              ? 'Link encerrado'
+              : 'Carregando link...',
+          supplement: guest ? (guest.kind === 'nave' ? 'nave' : (guest.supplement || 'modulo-basico')) : 'modulo-basico',
+          isShared: status !== 'revoked' && status !== 'not-found',
+        });
+        continue;
+      }
+      const char = characters.find(c => c.id === id);
+      if (char) {
+        result.push({
+          id: char.id,
+          label: char.name,
+          supplement: char.kind === 'nave' ? 'nave' : (char.supplement || 'modulo-basico'),
+          isShared: Boolean(char.shareId),
+        });
+      }
+    }
+    return result;
+  }, [openTabIds, characters, guestSheets, guestStatus]);
+
+  const openCharacterInTab = (charId: string, switchToTab = true) => {
+    setOpenTabIds(prev => (prev.includes(charId) ? prev : [...prev, charId]));
+    if (switchToTab) {
+      setActiveId(charId);
+      setView('sheet');
+    }
+  };
+
+  const closeSheetTab = (tabId: string) => {
+    const remaining = openTabIds.filter(
+      id => id !== tabId && (id.startsWith('shared:') || characters.some(c => c.id === id))
+    );
+    setOpenTabIds(remaining);
+    if (tabId.startsWith('shared:')) {
+      const shareId = tabId.slice('shared:'.length);
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('share') === shareId) {
+        params.delete('share');
+        const nextQuery = params.toString();
+        const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+        window.history.replaceState({}, '', nextUrl);
+      }
+    }
+    if (view === 'sheet' && activeId === tabId) {
+      if (remaining.length > 0) {
+        const closedIdx = openTabIds.indexOf(tabId);
+        const nextId = remaining[Math.min(closedIdx, remaining.length - 1)];
+        setActiveId(nextId);
+      } else {
+        setView('list');
+      }
+    }
+  };
+
+  const isGuestActive = Boolean(activeId && activeId.startsWith('shared:'));
+  const activeGuestShareId = isGuestActive && activeId ? activeId.slice('shared:'.length) : null;
+  const activeGuestStatus = activeGuestShareId ? (guestStatus[activeGuestShareId] || 'loading') : null;
+
   const activeCharacter = useMemo(() => {
+    if (activeGuestShareId) {
+      return (
+        guestSheets[activeGuestShareId] || {
+          ...INITIAL_CHARACTER,
+          id: `shared:${activeGuestShareId}`,
+          shareId: activeGuestShareId,
+          name: 'Carregando...',
+        }
+      );
+    }
     return characters.find(c => c.id === activeId) || characters[0] || INITIAL_CHARACTER;
-  }, [characters, activeId]);
+  }, [characters, guestSheets, activeId, activeGuestShareId]);
 
   const activeSupplementTheme = SUPPLEMENT_THEMES[(activeCharacter?.supplement || 'modulo-basico') as keyof typeof SUPPLEMENT_THEMES];
   const isNoLevelSupplement = activeCharacter.supplement === 'quatro-elementos' || activeCharacter.supplement === 'fading-humans' || activeCharacter.supplement === 'portadores-milagres';
@@ -280,11 +603,97 @@ export default function App() {
   const updateCharacter = (updates: Partial<CharacterSheet>) => {
     if (!activeCharacter || activeCharacter === INITIAL_CHARACTER) return;
 
-    setCharacters(prev => prev.map(c => 
-      c.id === activeCharacter.id 
-        ? { ...c, ...updates, updatedAt: new Date().toISOString() } 
-        : c
-    ));
+    if (activeCharacter.id.startsWith('shared:')) {
+      const shareId = activeCharacter.id.slice('shared:'.length);
+      const currentGuest = guestSheetsRef.current[shareId];
+      if (!currentGuest) return;
+      const nextGuest: CharacterSheet = {
+        ...currentGuest,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+      setGuestSheets(prev => ({ ...prev, [shareId]: nextGuest }));
+      scheduleCloudSync(shareId, nextGuest);
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+    setCharacters(prev =>
+      prev.map(c => {
+        if (c.id !== activeCharacter.id) return c;
+        const nextChar: CharacterSheet = { ...c, ...updates, updatedAt };
+        if (nextChar.shareId) {
+          scheduleCloudSync(nextChar.shareId, nextChar, nextChar.shareOwnerSecret);
+        }
+        return nextChar;
+      })
+    );
+  };
+
+  const handleOpenShareDialog = (character: CharacterSheet) => {
+    setShareError(null);
+    setShareDialogTargetId(character.id);
+  };
+
+  const handleCreateShareLink = async (char: CharacterSheet) => {
+    setShareBusy(true);
+    setShareError(null);
+    try {
+      const { shareId, ownerSecret, ownerHash } = await createShareLink(char);
+      ownerHashByShareIdRef.current[shareId] = ownerHash;
+      setCharacters(prev =>
+        prev.map(c =>
+          c.id === char.id
+            ? { ...c, shareId, shareOwnerSecret: ownerSecret, updatedAt: new Date().toISOString() }
+            : c
+        )
+      );
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'Não foi possível criar o link.');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleRevokeShareLink = async (char: CharacterSheet) => {
+    if (!char.shareId || !char.shareOwnerSecret) return;
+    setShareBusy(true);
+    setShareError(null);
+    const shareId = char.shareId;
+    try {
+      if (syncTimersRef.current[shareId]) {
+        window.clearTimeout(syncTimersRef.current[shareId]);
+        delete syncTimersRef.current[shareId];
+      }
+      await revokeShareLink(shareId, char.shareOwnerSecret);
+      delete ownerHashByShareIdRef.current[shareId];
+      delete latestPendingSheetRef.current[shareId];
+      setCharacters(prev =>
+        prev.map(c => {
+          if (c.id !== char.id) return c;
+          const { shareId: _sid, shareOwnerSecret: _sec, ...rest } = c;
+          return { ...rest, updatedAt: new Date().toISOString() };
+        })
+      );
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'Não foi possível deletar o link.');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleDuplicateGuestToLocal = () => {
+    if (!activeGuestShareId || !guestSheets[activeGuestShareId]) return;
+    const copyId = Math.random().toString(36).slice(2, 10);
+    const { shareId: _sid, shareOwnerSecret: _sec, ...base } = guestSheets[activeGuestShareId];
+    const localCopy: CharacterSheet = {
+      ...base,
+      id: copyId,
+      name: `${base.name || 'Ficha'} (Cópia local)`,
+      updatedAt: new Date().toISOString(),
+    };
+    setCharacters(prev => [...prev, localCopy]);
+    openCharacterInTab(copyId, true);
   };
 
   const exportCharacters = (list: CharacterSheet[] = characters) => {
@@ -709,6 +1118,13 @@ export default function App() {
 
     if (!prev) {
       // First time seeing this character in this session or after focus
+      skipNextMaxStatsDeltaRef.current.delete(charId);
+      setPrevMaxStats(p => ({ ...p, [charId]: { pv: currentMaxPV, pm: currentMaxPM } }));
+      return;
+    }
+
+    if (skipNextMaxStatsDeltaRef.current.has(charId)) {
+      skipNextMaxStatsDeltaRef.current.delete(charId);
       setPrevMaxStats(p => ({ ...p, [charId]: { pv: currentMaxPV, pm: currentMaxPM } }));
       return;
     }
@@ -782,6 +1198,7 @@ export default function App() {
     };
 
     setCharacters(prev => [...prev, newChar]);
+    setOpenTabIds(prev => (prev.includes(id) ? prev : [...prev, id]));
     setActiveId(id);
     setView('sheet');
   };
@@ -890,7 +1307,16 @@ export default function App() {
 
   const deleteCharacter = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const target = characters.find(c => c.id === id);
+    if (target?.shareId && target.shareOwnerSecret) {
+      if (syncTimersRef.current[target.shareId]) {
+        window.clearTimeout(syncTimersRef.current[target.shareId]);
+        delete syncTimersRef.current[target.shareId];
+      }
+      void revokeShareLink(target.shareId, target.shareOwnerSecret).catch(() => {});
+    }
     setCharacters(prev => prev.filter(c => c.id !== id));
+    setOpenTabIds(prev => prev.filter(tabId => tabId !== id));
     if (activeId === id) setActiveId(null);
   };
 
@@ -964,6 +1390,14 @@ export default function App() {
     });
   };
 
+  const shareDialogCharacter = useMemo(() => {
+    if (!shareDialogTargetId) return null;
+    if (shareDialogTargetId.startsWith('shared:')) {
+      return guestSheets[shareDialogTargetId.slice('shared:'.length)] || null;
+    }
+    return characters.find(c => c.id === shareDialogTargetId) || null;
+  }, [shareDialogTargetId, characters, guestSheets]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-ruvia-bg flex items-center justify-center">
@@ -978,10 +1412,74 @@ export default function App() {
     );
   }
 
+  const shareDialog = (
+    <ShareLinkDialog
+      character={shareDialogCharacter}
+      isGuestView={Boolean(shareDialogTargetId?.startsWith('shared:'))}
+      busy={shareBusy}
+      error={shareError}
+      onClose={() => {
+        setShareDialogTargetId(null);
+        setShareError(null);
+      }}
+      onCreateLink={handleCreateShareLink}
+      onRevokeLink={handleRevokeShareLink}
+    />
+  );
+
+  const tabsBar = (
+    <SheetTabsBar
+      tabs={openTabs}
+      activeTabId={activeId}
+      isListView={view === 'list'}
+      onSelectHome={() => {
+        setView('list');
+      }}
+      onSelectTab={id => openCharacterInTab(id, true)}
+      onCloseTab={closeSheetTab}
+    />
+  );
+
+  const guestBanner = isGuestActive && activeGuestShareId && activeGuestStatus === 'ready' ? (
+    <div className="border-b border-emerald-500/30 bg-emerald-950/85 px-4 py-2 text-xs text-emerald-100">
+      <div className="mx-auto flex max-w-[1024px] flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Radio size={14} className="shrink-0 text-emerald-400 animate-pulse" />
+          <span>
+            <strong>Modo compartilhado em tempo real:</strong> edições sincronizadas simultaneamente com o dono desta ficha.
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleDuplicateGuestToLocal}
+          className="rounded border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase text-emerald-200 hover:bg-emerald-500/30"
+        >
+          Salvar cópia local
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   if (view === 'list') {
     return (
-      <div className="max-w-[1024px] mx-auto min-h-screen p-8 flex flex-col gap-8 select-none">
-        {importDialog}
+      <>
+        {tabsBar}
+        {shareDialog}
+        <div className="max-w-[1024px] mx-auto min-h-screen p-8 flex flex-col gap-8 select-none">
+          {importDialog}
+          <CardContextMenu
+            state={contextMenu}
+            isOpenInTab={Boolean(contextMenu && openTabIds.includes(contextMenu.character.id))}
+            onClose={() => setContextMenu(null)}
+            onOpen={id => {
+              setActiveId(id);
+              setView('sheet');
+            }}
+            onOpenNewTab={id => openCharacterInTab(id, true)}
+            onOpenBackgroundTab={id => openCharacterInTab(id, false)}
+            onCloseTab={closeSheetTab}
+            onShare={handleOpenShareDialog}
+          />
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b-2 border-ruvia-accent pb-6">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -1157,7 +1655,7 @@ export default function App() {
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[10px] text-white/40">Arraste uma ficha para uma pasta. Pastas e fichas privadas ficam salvas neste navegador.</p>
+          <p className="mt-2 text-[10px] text-white/40">Arraste uma ficha para uma pasta. Clique com o botão direito em qualquer ficha para abrir em nova guia dentro do site.</p>
         </section>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1195,9 +1693,12 @@ export default function App() {
               }}
               data-supplement={char.supplement || 'modulo-basico'}
               onClick={() => {
-                setShareNotice(false);
                 setActiveId(char.id);
                 setView('sheet');
+              }}
+              onContextMenu={event => {
+                event.preventDefault();
+                setContextMenu({ x: event.clientX, y: event.clientY, character: char });
               }}
               className={`character-card p-6 rounded-sm cursor-pointer transition-all group ${char.supplement === 'eidos' ? 'relative overflow-hidden' : ''} ${char.kind === 'nave' ? 'bg-[#0b1323] border border-sky-300/30 hover:border-sky-200' : char.supplement === 'portadores-milagres' ? 'border border-[#6fd3a8]/40 bg-gradient-to-r from-[#dcefe4] to-[#163a30] hover:border-[#6fd3a8]' : `${SUPPLEMENT_THEMES[(char.supplement || 'modulo-basico')].card} ${char.supplement === 'eidos' ? 'hover:border-[#b9a7f3]' : char.supplement === 'infames-condutores' ? 'hover:border-[#aeb5bd]' : char.supplement === 'ad-astra' ? 'hover:border-[#b49ade]' : 'hover:border-ruvia-accent'}`}`}
             >
@@ -1281,8 +1782,14 @@ export default function App() {
                       </span>
                     ))}
                   </div>
-                  <p className={`mt-2 text-[10px] font-medium uppercase tracking-[0.12em] ${char.kind === 'nave' ? 'text-sky-300' : char.supplement === 'eidos' ? 'text-[#b9a7f3]' : 'text-ruvia-accent/80'}`}>
-                    {SUPPLEMENT_CARD_LABELS[char.supplement || 'modulo-basico']}
+                  <p className={`mt-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.12em] ${char.kind === 'nave' ? 'text-sky-300' : char.supplement === 'eidos' ? 'text-[#b9a7f3]' : 'text-ruvia-accent/80'}`}>
+                    <span>{SUPPLEMENT_CARD_LABELS[char.supplement || 'modulo-basico']}</span>
+                    {char.shareId && (
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                        <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Live
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="text-right">
@@ -1386,13 +1893,78 @@ export default function App() {
         </footer>
           {importDialog}
         </div>
+      </>
+    );
+  }
+
+  if (
+    isGuestActive &&
+    activeGuestShareId &&
+    (!guestSheets[activeGuestShareId] ||
+      activeGuestStatus === 'revoked' ||
+      activeGuestStatus === 'not-found' ||
+      activeGuestStatus === 'error')
+  ) {
+    const isRevoked = activeGuestStatus === 'revoked';
+    const isNotFound = activeGuestStatus === 'not-found';
+    const isError = activeGuestStatus === 'error';
+    return (
+      <>
+        {tabsBar}
+        {shareDialog}
+        <main className="min-h-screen bg-ruvia-bg flex items-center justify-center p-6 text-slate-100">
+          <div className="max-w-md w-full rounded-sm border border-amber-400/30 bg-[#101218] p-6 text-center shadow-2xl space-y-4">
+            <Radio
+              size={36}
+              className={`mx-auto ${isRevoked || isNotFound || isError ? 'text-rose-400' : 'text-amber-300 animate-pulse'}`}
+            />
+            <h2 className="text-lg font-bold uppercase tracking-wider text-white">
+              {isRevoked
+                ? 'Link de compartilhamento removido'
+                : isNotFound
+                  ? 'Ficha não encontrada'
+                  : isError
+                    ? 'Erro ao conectar à ficha'
+                    : 'Conectando em tempo real...'}
+            </h2>
+            <p className="text-xs leading-relaxed text-slate-300">
+              {isRevoked
+                ? 'O dono desta ficha deletou o link compartilhado. O acesso em tempo real foi encerrado.'
+                : isNotFound
+                  ? 'Este link é inválido ou a ficha não está mais disponível.'
+                  : isError
+                    ? guestErrorMessages[activeGuestShareId] || 'Não foi possível sincronizar esta ficha.'
+                    : 'Aguardando os dados da ficha compartilhada...'}
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => closeSheetTab(`shared:${activeGuestShareId}`)}
+                className="rounded-sm bg-amber-400 px-4 py-2 text-xs font-black uppercase text-black hover:bg-amber-300"
+              >
+                Fechar guia
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('list')}
+                className="rounded-sm border border-white/20 px-4 py-2 text-xs font-bold uppercase text-slate-200 hover:bg-white/10"
+              >
+                Menu Inicial
+              </button>
+            </div>
+          </div>
+        </main>
+      </>
     );
   }
 
   if (activeCharacter.kind === 'nave') {
     const shipData = activeCharacter.shipData || createShipData();
     return (
-        <>
+        <React.Fragment key={activeCharacter.id}>
+          {tabsBar}
+          {guestBanner}
+          {shareDialog}
           <input type="file" ref={fileInputRef} onChange={importCharacters} className="hidden" accept=".json" />
           <ShipSheetEditor
             name={activeCharacter.name}
@@ -1402,15 +1974,20 @@ export default function App() {
             onBack={() => setView('list')}
             onSave={exportCurrentCharacter}
             onLoad={() => fileInputRef.current?.click()}
+            onShare={() => handleOpenShareDialog(activeCharacter)}
+            isShared={Boolean(activeCharacter.shareId)}
           />
           {importDialog}
-        </>
+        </React.Fragment>
     );
   }
 
   if (activeCharacter.supplement === 'portadores-milagres') {
     return (
-      <>
+      <React.Fragment key={activeCharacter.id}>
+        {tabsBar}
+        {guestBanner}
+        {shareDialog}
         <input type="file" ref={fileInputRef} onChange={importCharacters} className="hidden" accept=".json" />
         <PortadoresSheetEditor
           character={activeCharacter}
@@ -1418,15 +1995,20 @@ export default function App() {
           onBack={() => setView('list')}
           onSave={exportCurrentCharacter}
           onLoad={() => fileInputRef.current?.click()}
+          onShare={() => handleOpenShareDialog(activeCharacter)}
+          isShared={Boolean(activeCharacter.shareId)}
         />
         {importDialog}
-      </>
+      </React.Fragment>
     );
   }
 
   if (activeCharacter.supplement === 'eidos') {
     return (
-      <>
+      <React.Fragment key={activeCharacter.id}>
+        {tabsBar}
+        {guestBanner}
+        {shareDialog}
         <input type="file" ref={fileInputRef} onChange={importCharacters} className="hidden" accept=".json" />
         <React.Suspense fallback={<main className="eidos-sheet grid min-h-screen place-items-center text-[#2a2550]">Carregando ficha Eidos...</main>}>
           <EidosSheetEditor
@@ -1435,15 +2017,21 @@ export default function App() {
             onBack={() => setView('list')}
             onSave={exportCurrentCharacter}
             onLoad={() => fileInputRef.current?.click()}
+            onShare={() => handleOpenShareDialog(activeCharacter)}
+            isShared={Boolean(activeCharacter.shareId)}
           />
         </React.Suspense>
         {importDialog}
-      </>
+      </React.Fragment>
     );
   }
 
   return (
-    <div data-supplement={activeCharacter.supplement || 'modulo-basico'} className={`max-w-[1024px] mx-auto min-h-screen p-8 flex flex-col gap-6 select-none sm:p-4 supplement-sheet supplement-${activeCharacter.supplement || 'modulo-basico'}`}>
+    <>
+      {tabsBar}
+      {guestBanner}
+      {shareDialog}
+      <div key={activeCharacter.id} data-supplement={activeCharacter.supplement || 'modulo-basico'} className={`max-w-[1024px] mx-auto min-h-screen p-8 flex flex-col gap-6 select-none sm:p-4 supplement-sheet supplement-${activeCharacter.supplement || 'modulo-basico'}`}>
         <input type="file" ref={fileInputRef} onChange={importCharacters} className="hidden" accept=".json" />
         {importDialog}
       {/* Header */}
@@ -1455,7 +2043,6 @@ export default function App() {
         >
           <button 
             onClick={() => {
-              setShareNotice(false);
               setView('list');
             }}
             className="p-2 border border-ruvia-accent/30 text-ruvia-accent hover:bg-ruvia-accent hover:text-ruvia-bg transition-colors"
@@ -1507,17 +2094,13 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => setShareNotice(true)}
-                className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${activeSupplementTheme.badge}`}
+                onClick={() => handleOpenShareDialog(activeCharacter)}
+                className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${activeCharacter.shareId ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30' : activeSupplementTheme.badge}`}
               >
-                Compartilhar (em breve)
+                {activeCharacter.shareId && <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />}
+                {activeCharacter.shareId ? 'Link ao vivo' : 'Compartilhar'}
               </button>
             </div>
-            {shareNotice && (
-              <div className="w-full rounded-sm border border-current/15 bg-black/10 p-2 text-left text-[11px]">
-                <p className="opacity-70">O compartilhamento simultâneo por link está em desenvolvimento e ainda não está disponível.</p>
-              </div>
-            )}
 
             <div className="flex flex-col gap-2 w-full">
               <input 
@@ -2203,6 +2786,7 @@ export default function App() {
       <footer className="mt-8 flex flex-col md:flex-row justify-center items-center text-[10px] uppercase tracking-[0.2em] text-ruvia-accent/50 gap-4">
         {/* Requested removals completed */}
       </footer>
-    </div>
+      </div>
+    </>
   );
 }

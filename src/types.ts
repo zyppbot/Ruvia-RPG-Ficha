@@ -408,6 +408,8 @@ export interface SupplementData {
 export interface CharacterSheet {
   id: string;
   folderId?: string;
+  shareId?: string;
+  shareOwnerSecret?: string;
   name: string;
   title: string;
   level: number;

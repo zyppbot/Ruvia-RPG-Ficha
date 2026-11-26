@@ -55,13 +55,14 @@ interface Props {
   onBack: () => void;
   onSave: () => void;
   onLoad: () => void;
+  onShare?: () => void;
+  isShared?: boolean;
 }
 
 const inputClass = 'min-w-0 rounded border border-sky-300/20 bg-slate-950/70 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-300';
 const panelClass = 'rounded border border-sky-300/20 bg-slate-900/70 p-4';
 
-export default function ShipSheetEditor({ name, data, onNameChange, onChange, onBack, onSave, onLoad }: Props) {
-  const [shareNotice, setShareNotice] = useState(false);
+export default function ShipSheetEditor({ name, data, onNameChange, onChange, onBack, onSave, onLoad, onShare, isShared }: Props) {
   const patch = (updates: Partial<ShipData>) => onChange({ ...data, ...updates });
   const patchResource = (key: keyof ShipData['resources'], property: keyof ShipData['resources']['hull'], value: number) => {
     patch({
@@ -107,16 +108,18 @@ export default function ShipSheetEditor({ name, data, onNameChange, onChange, on
             <button type="button" onClick={onLoad} className="flex items-center gap-2 rounded border border-sky-300/30 px-3 py-2 text-xs font-bold uppercase text-sky-200 hover:bg-sky-300/10">
               <Upload size={15} /> Carregar backup
             </button>
-            <button type="button" onClick={() => setShareNotice(true)} className="rounded border border-sky-300/30 px-3 py-2 text-xs font-bold uppercase text-sky-200 hover:bg-sky-300/10">
-              Compartilhar (em breve)
-            </button>
+            {onShare && (
+              <button
+                type="button"
+                onClick={onShare}
+                className={`flex items-center gap-1.5 rounded border px-3 py-2 text-xs font-bold uppercase ${isShared ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30' : 'border-sky-300/30 text-sky-200 hover:bg-sky-300/10'}`}
+              >
+                {isShared && <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />}
+                {isShared ? 'Link ao vivo' : 'Compartilhar'}
+              </button>
+            )}
           </div>
         </header>
-        {shareNotice && (
-          <div className="rounded border border-sky-300/20 bg-slate-900/70 p-3 text-xs text-sky-100/80">
-            Compartilhamento simultâneo por link está em desenvolvimento e ainda não está disponível.
-          </div>
-        )}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="flex flex-col gap-1 text-xs uppercase tracking-wider text-sky-200 sm:col-span-2">

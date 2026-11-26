@@ -261,16 +261,19 @@ export default function EidosSheetEditor({
   onBack,
   onSave,
   onLoad,
+  onShare,
+  isShared,
 }: {
   character: CharacterSheet;
   onChange: (updates: Partial<CharacterSheet>) => void;
   onBack: () => void;
   onSave: () => void;
   onLoad: () => void;
+  onShare?: () => void;
+  isShared?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<EidosTab>('Ficha');
   const [secretVisible, setSecretVisible] = useState(false);
-  const [shareNotice, setShareNotice] = useState(false);
   const data = character.supplementData?.eidos || {};
   const attrs = character.attributes;
   const level = character.level ?? 1;
@@ -883,15 +886,18 @@ export default function EidosSheetEditor({
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={onSave} className="rounded-lg border border-[#6c4fd1]/20 bg-white/70 px-3 py-2 text-xs font-semibold text-[#5143a0] hover:bg-[#6c4fd1]/[0.08]">Salvar backup</button>
             <button type="button" onClick={onLoad} className="rounded-lg border border-[#6c4fd1]/20 bg-white/70 px-3 py-2 text-xs font-semibold text-[#5143a0] hover:bg-[#6c4fd1]/[0.08]">Carregar backup</button>
-            <button type="button" onClick={() => setShareNotice(true)} className="rounded-lg border border-[#6c4fd1]/20 bg-white/70 px-3 py-2 text-xs font-semibold text-[#5143a0] hover:bg-[#6c4fd1]/[0.08]">Compartilhar (em breve)</button>
+            {onShare && (
+              <button
+                type="button"
+                onClick={onShare}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${isShared ? 'border-emerald-600/50 bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25' : 'border-[#6c4fd1]/20 bg-white/70 text-[#5143a0] hover:bg-[#6c4fd1]/[0.08]'}`}
+              >
+                {isShared && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />}
+                {isShared ? 'Link ao vivo' : 'Compartilhar'}
+              </button>
+            )}
           </div>
         </header>
-
-        {shareNotice && (
-          <div role="status" aria-live="polite" className="rounded-lg border border-[#6c4fd1]/20 bg-white/60 p-3 text-xs text-[#5143a0]">
-            O compartilhamento simultâneo por link está em desenvolvimento e ainda não está disponível.
-          </div>
-        )}
 
         <nav aria-label="Seções da ficha" className="-mx-3 flex gap-1 overflow-x-auto px-3 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
           {TABS.map(tab => (
